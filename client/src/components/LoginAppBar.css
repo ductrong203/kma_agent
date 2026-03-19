@@ -1,0 +1,138 @@
+/* Login AppBar Styles */
+.login-appbar {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 80px;
+}
+
+.login-appbar-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.login-appbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.appbar-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+.title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.appbar-title {
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.appbar-subtitle {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 400;
+  margin: 0;
+  font-style: italic;
+}
+
+.login-appbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.system-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.system-name {
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.system-version {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .login-appbar {
+    height: 70px;
+  }
+  
+  .login-appbar-content {
+    padding: 0 16px;
+  }
+  
+  .appbar-logo {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .appbar-title {
+    font-size: 16px;
+  }
+  
+  .appbar-subtitle {
+    font-size: 10px;
+  }
+  
+  .system-name {
+    font-size: 12px;
+  }
+  
+  .system-version {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-section {
+    gap: 12px;
+  }
+  
+  .appbar-title {
+    font-size: 14px;
+  }
+  
+  .appbar-subtitle {
+    display: none; /* Hide subtitle on very small screens */
+  }
+  
+  .system-info {
+    display: none; /* Hide system info on very small screens */
+  }
+}

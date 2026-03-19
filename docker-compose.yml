@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lma_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-lma_chatbot}
+      POSTGRES_USER: ${DB_USER:-lma_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pass123}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lma_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-lma_user}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: lma_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-lma_user}:${DB_PASSWORD:-pass123}@postgres:5432/${DB_NAME:-lma_chatbot}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api/src:/app/src
+      - ./api/data:/app/data
+    networks:
+      - lma_network
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: lma_client
+    depends_on:
+      - api
+    environment:
+      REACT_APP_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    networks:
+      - lma_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  lma_network:
+    driver: bridge

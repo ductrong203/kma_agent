@@ -1,0 +1,238 @@
+/* AppBar Styles */
+.app-bar {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border-bottom: 3px solid #991b1b;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 80px; /* Explicit height to ensure content below can adjust properly */
+}
+
+.app-bar-content {
+  max-width: 100%; /* Thay đổi từ 1200px thành 100% để đầy màn hình */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0.25rem; /* Giảm padding horizontal xuống còn 0.25rem */
+  min-height: 80px;
+  width: 100%;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Giảm gap */
+  padding-left: 30px; /* Xóa bỏ padding */
+}
+
+.logo {
+  width: 50px; /* Giảm kích thước logo */
+  height: 50px;
+  border-radius: 50%;
+  border: 3px solid white;
+  background: white;
+  padding: 4px;
+  object-fit: contain;
+}
+
+.title-section {
+  color: white;
+}
+
+.main-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.5px;
+}
+
+.sub-title {
+  font-size: 0.8rem;
+  margin: 0;
+  opacity: 0.9;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.user-section {
+  display: flex;
+  align-items: center;
+  padding-right: 30px; /* Giữ padding */
+}
+
+.mode-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px; /* Giảm gap */
+  margin-right: 80px; /* Giảm margin */
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px; /* Giảm gap */
+  padding: 4px 8px; /* Giảm padding */
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: white;
+  background-color: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.mode-btn.active {
+  background-color: white;
+  color: #b91c1c;
+  border-color: white;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Giảm gap */
+}
+
+.welcome-text {
+  color: white;
+  font-weight: 500;
+  font-size: 0.8rem; /* Giảm font size */
+}
+
+.admin-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.admin-link:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.guest-text {
+  color: white;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 0.4rem 0.8rem; /* Giảm padding */
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem; /* Giảm font size */
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Loại bỏ center-section nếu không sử dụng */
+.center-section {
+  display: none; /* Ẩn nếu không cần */
+}
+
+.new-chat-btn {
+  display: none; /* Ẩn nếu không sử dụng */
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .app-bar-content {
+    min-height: 60px; /* Giảm chiều cao */
+    padding: 0.4rem 0; /* Giảm padding */
+  }
+
+  .logo-section {
+    padding-left: 0; /* Loại bỏ padding */
+  }
+  
+  .user-section {
+    padding-right: 0; /* Loại bỏ padding */
+  }
+
+  .logo {
+    width: 40px; /* Giảm kích thước logo */
+    height: 40px;
+  }
+
+  .main-title {
+    font-size: 1.25rem;
+  }
+
+  .sub-title {
+    font-size: 0.75rem;
+  }
+
+  .welcome-text {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-bar-content {
+    min-height: 50px; /* Giảm chiều cao */
+    padding: 0.3rem 0; /* Giảm padding */
+  }
+
+  .logo-section {
+    gap: 0.3rem; /* Giảm gap */
+    padding-left: 0; /* Loại bỏ padding */
+  }
+  
+  .user-section {
+    padding-right: 0; /* Loại bỏ padding */
+  }
+
+  .logo {
+    width: 35px; /* Giảm kích thước logo */
+    height: 35px;
+    border: 2px solid white; /* Giảm viền */
+  }
+
+  .logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .main-title {
+    font-size: 1rem;
+  }
+
+  .sub-title {
+    display: none;
+  }
+
+  .welcome-text {
+    display: none;
+  }
+
+  .user-info {
+    gap: 0.5rem;
+  }
+}

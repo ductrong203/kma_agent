@@ -1,0 +1,215 @@
+/* Chat Header - LibreChat Style */
+
+.chat-header {
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  gap: 24px;
+}
+
+/* Left Section */
+.header-left {
+  flex: 1;
+}
+
+.chat-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #1f2937, #111827);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Middle Section */
+.header-middle {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.model-badge,
+.department-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0891b2;
+}
+
+.department-badge {
+  background: rgba(124, 58, 237, 0.1);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  color: #7c3aed;
+}
+
+.model-name,
+.department-name {
+  white-space: nowrap;
+}
+
+/* Right Section */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-selector {
+  position: relative;
+}
+
+.dropdown-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  font-sizes: 14px;
+  font-weight: 500;
+  color: #374151;
+  transition: all 0.2s;
+}
+
+.dropdown-toggle:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.dropdown-toggle:active {
+  background: #f3f4f6;
+}
+
+.model-text {
+  white-space: nowrap;
+}
+
+/* Dropdown Menu */
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 4px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  padding: 10px 16px;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 13px;
+}
+
+.dropdown-item:hover {
+  background: #f3f4f6;
+}
+
+.dropdown-item:first-child {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Header Button */
+.header-btn {
+  background: white;
+  border: 1px solid #d1d5db;
+  color: #6b7280;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-btn:hover {
+  background: #f9fafb;
+  color: #111827;
+  border-color: #9ca3af;
+}
+
+.header-btn:active {
+  background: #f3f4f6;
+}
+
+/* Status Bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px 12px 24px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.status-indicator.online {
+  background: #10b981;
+}
+
+.status-text {
+  color: #6b7280;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-middle {
+    width: 100%;
+    order: 3;
+  }
+
+  .header-right {
+    width: 100%;
+    order: 2;
+  }
+
+  .chat-title {
+    font-size: 18px;
+  }
+
+  .header-subtitle {
+    display: none;
+  }
+}

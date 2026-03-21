@@ -51,6 +51,9 @@ try:
     print(f"   ✓ Success! Loaded {len(docs)} documents")
 except Exception as e:
     print(f"   ✗ Failed: {type(e).__name__}: {e}")
+    print("\n" + "="*80)
+    print("FULL TRACEBACK:")
+    print("="*80)
     traceback.print_exc()
     sys.exit(1)
 

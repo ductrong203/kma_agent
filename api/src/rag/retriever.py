@@ -83,7 +83,7 @@ class MetadataEnhancedHybridRetriever(BaseRetriever, BaseModel):
             vector_docs = self.vectorstore.similarity_search(query, k=self.k)
         
         # BM25 search (filter afterward since BM25Retriever doesn't support metadata filtering)
-        bm25_docs = self.bm25_retriever.get_relevant_documents(query)
+        bm25_docs = self.bm25_retriever.invoke(query)
         
         # Filter BM25 results by metadata if specified
         if metadata_filter and hasattr(self.bm25_retriever, 'docs'):
@@ -202,7 +202,7 @@ class HybridRetriever(BaseRetriever, BaseModel):
 
     def _get_relevant_documents(self, query: str) -> List[Document]:
         vector_docs = self.vectorstore.similarity_search(query, k=self.k)
-        bm25_docs = self.bm25_retriever.get_relevant_documents(query)
+        bm25_docs = self.bm25_retriever.invoke(query)
 
         all_docs = []
         seen_content = set()

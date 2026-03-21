@@ -91,14 +91,18 @@ class RAGComparisonTester:
         if not DATASET_PATH.exists():
             raise FileNotFoundError(f"Dataset not found at {DATASET_PATH}")
         
-        with open(DATASET_PATH, 'r', encoding='utf-8') as f:
+        with open(DATASET_PATH, 'r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
+            row_count = 0
             for row in reader:
+                row_count += 1
                 if row.get('question') and row.get('answer_expected'):
                     self.dataset.append({
                         'question': row['question'].strip(),
                         'answer_expected': row['answer_expected'].strip()
                     })
+            if row_count == 0:
+                logger.warning(f"⚠️  CSV file is empty or has no valid rows")
         
         logger.info(f"✅ Loaded {len(self.dataset)} Q&A pairs")
         

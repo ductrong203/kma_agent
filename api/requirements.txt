@@ -74,6 +74,9 @@ python-louvain>=0.16,<0.17
 networkx>=3.0,<4.0
 community>=1.0.0
 
+# Monitoring and tracing
+langsmith>=0.2.0,<1.0.0
+
 # Utilities
 requests>=2.32.0,<3.0.0
 typer>=0.15.4,<0.16.0

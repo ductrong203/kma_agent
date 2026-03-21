@@ -8,7 +8,10 @@ from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.callbacks.manager import CallbackManager
 from langchain_ollama import ChatOllama
 from langsmith import Client as LangSmithClient
-from langsmith.callbacks.tracers import LangChainTracer
+try:
+    from langsmith.wrappers.langchain import LangChainTracer
+except ImportError:
+    LangChainTracer = None
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .llm_factory import LLMFactory
@@ -56,10 +59,15 @@ class LLMConfig:
     
     @classmethod
     def create_callback_manager(cls, project_name: str = None) -> CallbackManager:
-        """Create a callback manager with LangSmith tracer."""
+        """Create a callback manager with LangSmith tracer if available."""
         if project_name is None:
             project_name = cls.DEFAULT_PROJECT_NAME
-        return CallbackManager([LangChainTracer(project_name=project_name)])
+        
+        callbacks = []
+        if LangChainTracer is not None:
+            callbacks.append(LangChainTracer(project_name=project_name))
+        
+        return CallbackManager(callbacks) if callbacks else CallbackManager([])
     
 # Utility function to get an LLM instance
 def get_llm(model_name: str = None, project_name: str = None) -> BaseChatModel:

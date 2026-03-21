@@ -180,7 +180,7 @@ class RAGComparisonTester:
                 
                 # Create subgraph partitioner
                 logger.info("🔗 Creating SubgraphPartitioner...")
-                partitioner = SubgraphPartitioner(doc_graph)
+                partitioner = SubgraphPartitioner(doc_graph.graph)  # ✅ Pass the nx.Graph, not DocumentGraph
                 logger.info(f"📊 Partitioner created with {len(partitioner.communities)} communities")
                 
                 # Initialize graph retriever

@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text:latest")
-DATASET_PATH = Path(__file__).parent / "dataset chatbot update.csv"
+DATASET_PATH = Path(__file__).parent.parent / "dataset chatbot update.csv"
 OUTPUT_DIR = Path(__file__).parent / "rag_test_results"
 OUTPUT_DIR.mkdir(exist_ok=True)
 

@@ -165,24 +165,37 @@ class RAGComparisonTester:
         # Setup Graph RAG (if documents available)
         try:
             logger.info("🔗 Building GraphRAG retriever...")
-            # Create document graph
-            graph = DocumentGraph()
-            for i, doc in enumerate(documents):
-                graph.add_document(f"doc_{i}", doc.page_content, doc.metadata)
             
-            # Create subgraph partitioner
-            partitioner = SubgraphPartitioner(graph)
-            
-            # Initialize graph retriever
-            self.graph_retriever = GraphRoutedRetriever(
-                graph=graph.graph,
-                partitioner=partitioner,
-                k=TEST_CONFIG['k_retrieved'],
-                embeddings_model=OLLAMA_EMBEDDING_MODEL
-            )
-            logger.info("✅ GraphRAG Retriever ready")
+            # Validate documents
+            if not documents:
+                logger.warning("⚠️  No documents available for GraphRAG")
+                self.graph_retriever = None
+            else:
+                logger.info(f"📊 Creating DocumentGraph from {len(documents)} documents...")
+                # Create document graph using build_graph
+                doc_graph = DocumentGraph()
+                doc_graph.build_graph(documents)
+                
+                logger.info(f"📊 Graph created: {doc_graph.graph.number_of_nodes()} nodes, {doc_graph.graph.number_of_edges()} edges")
+                
+                # Create subgraph partitioner
+                logger.info("🔗 Creating SubgraphPartitioner...")
+                partitioner = SubgraphPartitioner(doc_graph)
+                logger.info(f"📊 Partitioner created with {len(partitioner.communities)} communities")
+                
+                # Initialize graph retriever
+                logger.info("🔗 Initializing GraphRoutedRetriever...")
+                self.graph_retriever = GraphRoutedRetriever(
+                    graph=doc_graph.graph,
+                    partitioner=partitioner,
+                    k=TEST_CONFIG['k_retrieved'],
+                    embeddings_model=OLLAMA_EMBEDDING_MODEL
+                )
+                logger.info("✅ GraphRAG Retriever ready")
         except Exception as e:
-            logger.warning(f"⚠️  Failed to setup GraphRAG: {e}")
+            import traceback
+            logger.error(f"❌ Failed to setup GraphRAG: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             logger.info("Proceeding with Traditional RAG only")
             self.graph_retriever = None
     

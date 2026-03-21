@@ -143,8 +143,7 @@ class RAGComparisonTester:
         logger.info(f"📝 Creating FAISS vector store with {len(documents)} documents...")
         vectorstore = FAISS.from_documents(
             documents, 
-            self.embeddings,
-            metadatas=[doc.metadata for doc in documents]
+            self.embeddings
         )
         
         logger.info("🔤 Creating BM25 retriever...")

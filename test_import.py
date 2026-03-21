@@ -54,7 +54,12 @@ except Exception as e:
     print("\n" + "="*80)
     print("FULL TRACEBACK:")
     print("="*80)
-    traceback.print_exc()
+    tb_str = traceback.format_exc()
+    print(tb_str)
+    # Save to file for review
+    with open("error_traceback.txt", "w", encoding="utf-8") as f:
+        f.write(tb_str)
+    print("\n✓ Traceback saved to error_traceback.txt")
     sys.exit(1)
 
 print("\nAll tests passed!")

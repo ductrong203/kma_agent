@@ -75,6 +75,9 @@ temp/
 !.env.dev
 !.env.prod
 
+# Requirements (local dependencies)
+api/requirements.txt
+
 # Git
 .git/
 .gitattributes

@@ -300,9 +300,9 @@ class RAGComparisonTester:
             start_time = time.time()
             
             if retriever_type == "traditional_rag":
-                retrieved_docs = self.traditional_retriever.invoke({"query": query})
+                retrieved_docs = self.traditional_retriever.invoke(query)
             else:  # graph_rag
-                retrieved_docs = self.graph_retriever.invoke({"query": query})
+                retrieved_docs = self.graph_retriever.invoke(query)
             
             retrieval_time = time.time() - start_time
             

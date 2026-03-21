@@ -3,7 +3,7 @@ LLM Factory để tạo các instance model khác nhau dựa trên loại model 
 """
 from typing import Optional, Dict, Any, List
 from langchain_core.language_models import BaseChatModel
-from langchain.callbacks.manager import CallbackManager
+from langchain_core.callbacks.manager import CallbackManager
 from langchain_ollama import ChatOllama
 from langchain_google_genai import ChatGoogleGenerativeAI
 import os

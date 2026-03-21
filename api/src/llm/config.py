@@ -5,9 +5,10 @@ from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
-from langchain.callbacks.manager import CallbackManager
+from langchain_core.callbacks.manager import CallbackManager
 from langchain_ollama import ChatOllama
-from langchain_community.callbacks.tracers import LangChainTracer
+from langsmith import Client as LangSmithClient
+from langsmith.callbacks.tracers import LangChainTracer
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .llm_factory import LLMFactory

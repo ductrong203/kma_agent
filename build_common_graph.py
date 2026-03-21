@@ -8,10 +8,10 @@ import os
 import time
 from pathlib import Path
 
-# Add src to path
+# Add api to path for proper imports
 project_root = Path(__file__).parent
-src_path = project_root / "api" / "src"
-sys.path.insert(0, str(src_path))
+api_path = project_root / "api"
+sys.path.insert(0, str(api_path))
 
 def main():
     print("=" * 80)
@@ -20,8 +20,8 @@ def main():
     print()
     
     try:
-        from rag.table_aware_chunking import load_documents_from_folder
-        from graph_rag.graph_builder import DocumentGraph
+        from src.rag.table_aware_chunking import load_documents_from_folder
+        from src.graph_rag.graph_builder import DocumentGraph
     except ImportError as e:
         print(f"❌ Import error: {e}")
         print()

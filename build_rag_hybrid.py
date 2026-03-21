@@ -9,10 +9,10 @@ import time
 import pickle
 from pathlib import Path
 
-# Add src to path
+# Add api to path for proper imports
 project_root = Path(__file__).parent
-src_path = project_root / "api" / "src"
-sys.path.insert(0, str(src_path))
+api_path = project_root / "api"
+sys.path.insert(0, str(api_path))
 
 def main():
     print("=" * 80)
@@ -21,7 +21,7 @@ def main():
     print()
     
     try:
-        from rag.table_aware_chunking import load_documents_from_folder
+        from src.rag.table_aware_chunking import load_documents_from_folder
         from langchain_community.retrievers import BM25Retriever
         from langchain_community.vectorstores import FAISS
         from langchain_ollama import OllamaEmbeddings

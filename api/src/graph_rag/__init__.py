@@ -11,10 +11,21 @@ Main components:
 - LearnedRouter: Neural routing policy
 """
 
-from .graph_builder import DocumentGraph
-from .subgraph_partitioner import SubgraphPartitioner
-from .graph_retriever import GraphRoutedRetriever
-from .department_graph_manager import DepartmentGraphManager
+# Lazy imports - avoid circular imports when imported as api.src.graph_rag
+def __getattr__(name):
+    if name == "DocumentGraph":
+        from .graph_builder import DocumentGraph
+        return DocumentGraph
+    elif name == "SubgraphPartitioner":
+        from .subgraph_partitioner import SubgraphPartitioner
+        return SubgraphPartitioner
+    elif name == "GraphRoutedRetriever":
+        from .graph_retriever import GraphRoutedRetriever
+        return GraphRoutedRetriever
+    elif name == "DepartmentGraphManager":
+        from .department_graph_manager import DepartmentGraphManager
+        return DepartmentGraphManager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     'DocumentGraph',

@@ -5,6 +5,7 @@ This package provides chatbot functionality for answering student queries about
 regulations, student information, and academic scores.
 """
 
-from . import agent, rag, score, llm
+# Lazy imports - only import when needed to avoid circular import issues
+# from . import agent, rag, score, llm
 
 __version__ = "0.1.0"

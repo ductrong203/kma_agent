@@ -25,7 +25,7 @@ print()
 
 # Path configurations
 data_folder = os.path.join(project_root, "data")
-output_folder = os.path.join(project_root, "department_graphs")
+output_folder = os.path.join(project_root, "graphs", "department_graphs")
 
 # Load tất cả documents
 print(f"📁 Loading documents from: {data_folder}")

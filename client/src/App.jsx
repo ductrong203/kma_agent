@@ -12,6 +12,8 @@ import WelcomeScreen from "./components/WelcomeScreen";
 import Login from "./components/Login";
 import FileChat from "./components/FileChat";
 import UsageStats from "./components/UsageStats";
+import DarkModeToggle from "./components/DarkModeToggle";
+import useDarkMode from "./hooks/useDarkMode";
 import chatService from "./services/chatService";
 import authService from "./services/authService";
 import { v4 as uuidv4 } from "uuid";
@@ -33,9 +35,12 @@ function ChatApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [viewMode, setViewMode] = useState("chat"); // 'chat' or 'file-chat'
   const [showStatsPanel, setShowStatsPanel] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState('all'); // Default to 'all'
+  const [selectedFolder, setSelectedFolder] = useState("all"); // Default to 'all'
   const [folders, setFolders] = useState([]);
   const messagesEndRef = useRef(null);
+
+  // Initialize dark mode
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
 
   // Scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -75,7 +80,7 @@ function ChatApp() {
         } else {
           console.error("Invalid or missing user ID:", currentUser);
           setError(
-            "Không thể xác thực người dùng: ID người dùng không hợp lệ. Vui lòng đăng nhập lại."
+            "Không thể xác thực người dùng: ID người dùng không hợp lệ. Vui lòng đăng nhập lại.",
           );
         }
       } else {
@@ -144,37 +149,40 @@ function ChatApp() {
             console.error("Failed to load conversations:", convResponse.error);
             setError("Lỗi khi tải danh sách hội thoại: " + convResponse.error);
           }
-          
+
           // Load folders list from API
-          console.log('Loading folders from API...');
+          console.log("Loading folders from API...");
           const foldersResponse = await chatService.getFolders();
-          console.log('Folders API response:', foldersResponse);
-          
+          console.log("Folders API response:", foldersResponse);
+
           if (foldersResponse.success && foldersResponse.folders.length > 0) {
             // Map folders to include display names (optional, will show folder name if no mapping)
             const folderMappings = {
-              'default': 'Mặc định',
-              'phongdaotao': 'Phòng Đào tạo',
-              'phongdaotao/daihoc': 'Phòng Đào tạo - Đại học',
-              'phongdaotao/giangvien': 'Phòng Đào tạo - Giảng viên',
-              'phongdaotao/thacsi': 'Phòng Đào tạo - Thạc sĩ',
-              'phongdaotao/tiensi': 'Phòng Đào tạo - Tiến sĩ',
-              'phongkhaothi': 'Phòng Khảo thí',
-              'khoa': 'Các Khoa',
-              'viennghiencuuvahoptacphattrien': 'Viện Nghiên cứu',
-              'thongtinHVKTMM': 'Thông tin Học viện',
-              'test': 'Test'
+              default: "Mặc định",
+              phongdaotao: "Phòng Đào tạo",
+              "phongdaotao/daihoc": "Phòng Đào tạo - Đại học",
+              "phongdaotao/giangvien": "Phòng Đào tạo - Giảng viên",
+              "phongdaotao/thacsi": "Phòng Đào tạo - Thạc sĩ",
+              "phongdaotao/tiensi": "Phòng Đào tạo - Tiến sĩ",
+              phongkhaothi: "Phòng Khảo thí",
+              khoa: "Các Khoa",
+              viennghiencuuvahoptacphattrien: "Viện Nghiên cứu",
+              thongtinHVKTMM: "Thông tin Học viện",
+              test: "Test",
             };
-            
-            const mappedFolders = foldersResponse.folders.map(folder => ({
+
+            const mappedFolders = foldersResponse.folders.map((folder) => ({
               name: folder,
-              displayName: folderMappings[folder] || folder // Use folder name if no mapping found
+              displayName: folderMappings[folder] || folder, // Use folder name if no mapping found
             }));
-            
-            console.log('Mapped folders:', mappedFolders);
+
+            console.log("Mapped folders:", mappedFolders);
             setFolders(mappedFolders);
           } else {
-            console.error('Failed to load folders from API:', foldersResponse.error);
+            console.error(
+              "Failed to load folders from API:",
+              foldersResponse.error,
+            );
             // Don't set any folders - dropdown will only show "Tất cả"
             setFolders([]);
           }
@@ -242,7 +250,7 @@ function ChatApp() {
       console.error("Login failed or invalid user data:", userData);
       setError(
         userData.error ||
-          "Đăng nhập thất bại: Dữ liệu người dùng không hợp lệ. Vui lòng thử lại."
+          "Đăng nhập thất bại: Dữ liệu người dùng không hợp lệ. Vui lòng thử lại.",
       );
     }
   };
@@ -255,7 +263,7 @@ function ChatApp() {
   const handleSummaryClick = async () => {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/api/auth/generate_sso_token?user_id=${user.id}&email=${user.email}`
+        `${API_BASE_URL}/api/auth/generate_sso_token?user_id=${user.id}&email=${user.email}`,
       );
       const data = await res.json();
       const token = data.token;
@@ -305,7 +313,7 @@ function ChatApp() {
         console.log("Creating new conversation for user:", user.id);
         const response = await chatService.createConversation(
           user.id,
-          `Cuộc trò chuyện ${new Date().toLocaleString()}`
+          `Cuộc trò chuyện ${new Date().toLocaleString()}`,
         );
         if (!response.success) {
           throw new Error("Không thể tạo hội thoại mới: " + response.error);
@@ -320,11 +328,14 @@ function ChatApp() {
       }
 
       // Gửi tin nhắn với conversationId đã xác định
-      console.log('Sending message with conversationId:', currentConversationId);
+      console.log(
+        "Sending message with conversationId:",
+        currentConversationId,
+      );
       const response = await chatService.sendMessage(
-        currentConversationId, 
+        currentConversationId,
         messageText,
-        selectedFolder === 'all' ? null : selectedFolder // Send null for 'all', otherwise send the selected folder
+        selectedFolder === "all" ? null : selectedFolder, // Send null for 'all', otherwise send the selected folder
       );
       if (response.success) {
         const botMessage = {
@@ -339,38 +350,44 @@ function ChatApp() {
         setError(null);
       } else {
         // Kiểm tra nếu là lỗi rate limit (status code 429)
-        console.log('Response error:', response);
-        
+        console.log("Response error:", response);
+
         // Safely convert error to string
-        let errorMsg = '';
-        if (typeof response.error === 'string') {
+        let errorMsg = "";
+        if (typeof response.error === "string") {
           errorMsg = response.error;
-        } else if (response.error && typeof response.error === 'object') {
+        } else if (response.error && typeof response.error === "object") {
           // Check if it's a validation error array
           if (Array.isArray(response.error)) {
-            errorMsg = response.error.map(err => {
-              if (typeof err === 'string') return err;
-              if (err.msg) return err.msg;
-              return JSON.stringify(err);
-            }).join(', ');
+            errorMsg = response.error
+              .map((err) => {
+                if (typeof err === "string") return err;
+                if (err.msg) return err.msg;
+                return JSON.stringify(err);
+              })
+              .join(", ");
           } else {
             errorMsg = JSON.stringify(response.error);
           }
         }
-        
-        let responseMsg = '';
-        if (typeof response.message === 'string') {
+
+        let responseMsg = "";
+        if (typeof response.message === "string") {
           responseMsg = response.message;
-        } else if (response.message && typeof response.message === 'object') {
+        } else if (response.message && typeof response.message === "object") {
           responseMsg = JSON.stringify(response.message);
         }
-        
-        if (response.statusCode === 429 || errorMsg?.includes('giới hạn') || errorMsg?.includes('limit')) {
+
+        if (
+          response.statusCode === 429 ||
+          errorMsg?.includes("giới hạn") ||
+          errorMsg?.includes("limit")
+        ) {
           // Hiển thị thông báo giới hạn tốc độ chính xác từ API
           const rateLimitMessage = {
             id: uuidv4(),
-            content: `⚠️ ${responseMsg || errorMsg || 'Bạn đã vượt quá giới hạn gửi tin nhắn. Vui lòng thử lại sau.'}`,
-            sender: 'bot',
+            content: `⚠️ ${responseMsg || errorMsg || "Bạn đã vượt quá giới hạn gửi tin nhắn. Vui lòng thử lại sau."}`,
+            sender: "bot",
             timestamp: new Date().toISOString(),
             isError: true,
             isRateLimit: true,
@@ -379,10 +396,10 @@ function ChatApp() {
 
           // Không hiển thị bảng thống kê sử dụng
           // window.dispatchEvent(new Event('showRateLimitStats'));
-          
+
           setError(responseMsg || errorMsg);
         } else {
-          throw new Error(errorMsg || responseMsg || 'Failed to send message');
+          throw new Error(errorMsg || responseMsg || "Failed to send message");
         }
       }
     } catch (error) {
@@ -401,22 +418,34 @@ function ChatApp() {
         // window.dispatchEvent(new Event('showRateLimitStats'));
       } else if (error.response && error.response.status === 403) {
         // Lỗi phân quyền hoặc giới hạn phạm vi truy vấn
-        const detailData = error.response.data?.detail || error.response.data?.message;
-        errorText = typeof detailData === 'string' ? detailData : 
-                   JSON.stringify(detailData) || 'Câu hỏi này vượt ngoài phạm vi được phép. Vui lòng chọn phạm vi phù hợp hoặc hỏi câu hỏi khác.';
+        const detailData =
+          error.response.data?.detail || error.response.data?.message;
+        errorText =
+          typeof detailData === "string"
+            ? detailData
+            : JSON.stringify(detailData) ||
+              "Câu hỏi này vượt ngoài phạm vi được phép. Vui lòng chọn phạm vi phù hợp hoặc hỏi câu hỏi khác.";
       } else if (error.response && error.response.status === 401) {
-        errorText = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        errorText = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
       } else if (error.response && error.response.status === 400) {
-        const detailData = error.response.data?.detail || error.response.data?.message;
-        errorText = typeof detailData === 'string' ? detailData : 
-                   JSON.stringify(detailData) || 'Dữ liệu gửi không hợp lệ. Vui lòng kiểm tra lại.';
+        const detailData =
+          error.response.data?.detail || error.response.data?.message;
+        errorText =
+          typeof detailData === "string"
+            ? detailData
+            : JSON.stringify(detailData) ||
+              "Dữ liệu gửi không hợp lệ. Vui lòng kiểm tra lại.";
       } else if (error.response && error.response.status === 500) {
-        errorText = 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau hoặc liên hệ với quản trị viên.';
-      } else if (error.message.includes('Invalid ID format')) {
-        errorText = 'Lỗi: ID hội thoại không hợp lệ. Vui lòng thử lại.';
-      } else if (error.message.includes('Unprocessable')) {
-        errorText = 'Lỗi: Dữ liệu gửi không hợp lệ. Vui lòng kiểm tra lại.';
-      } else if (error.message.includes('giới hạn') || error.message.includes('limit')) {
+        errorText =
+          "Lỗi máy chủ nội bộ. Vui lòng thử lại sau hoặc liên hệ với quản trị viên.";
+      } else if (error.message.includes("Invalid ID format")) {
+        errorText = "Lỗi: ID hội thoại không hợp lệ. Vui lòng thử lại.";
+      } else if (error.message.includes("Unprocessable")) {
+        errorText = "Lỗi: Dữ liệu gửi không hợp lệ. Vui lòng kiểm tra lại.";
+      } else if (
+        error.message.includes("giới hạn") ||
+        error.message.includes("limit")
+      ) {
         errorText = error.message;
         isRateLimit = true;
         // Không hiển thị bảng thống kê sử dụng
@@ -428,11 +457,14 @@ function ChatApp() {
         errorText = "Yêu cầu bị hết thời gian chờ. Vui lòng thử lại sau.";
       } else {
         // Sử dụng thông báo lỗi chi tiết từ error.message hoặc response
-        const detailData = error.response?.data?.detail || error.response?.data?.message;
-        errorText = typeof detailData === 'string' ? detailData :
-                   (detailData ? JSON.stringify(detailData) : '') ||
-                   error.message || 
-                   'Có lỗi không xác định xảy ra. Vui lòng thử lại sau.';
+        const detailData =
+          error.response?.data?.detail || error.response?.data?.message;
+        errorText =
+          typeof detailData === "string"
+            ? detailData
+            : (detailData ? JSON.stringify(detailData) : "") ||
+              error.message ||
+              "Có lỗi không xác định xảy ra. Vui lòng thử lại sau.";
       }
 
       const errorMessage = {
@@ -467,7 +499,7 @@ function ChatApp() {
         console.log("Creating new conversation for user:", user.id);
         const response = await chatService.createConversation(
           user.id,
-          `Cuộc trò chuyện ${new Date().toLocaleString()}`
+          `Cuộc trò chuyện ${new Date().toLocaleString()}`,
         );
         if (!response.success) {
           console.error("Failed to create new conversation:", response.error);
@@ -533,6 +565,8 @@ function ChatApp() {
         viewMode={viewMode}
         onSwitchMode={handleSwitchMode}
         handleSummaryClick={handleSummaryClick}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={toggleDarkMode}
       />
 
       {viewMode === "file-chat" ? (

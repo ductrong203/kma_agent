@@ -1,10 +1,11 @@
-// Option 1: Update MessageBubble to use 'text' instead of 'content'
+// Modern LibreChat-style MessageBubble
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FiUser, FiMessageCircle, FiAlertCircle } from "react-icons/fi";
 import { MESSAGE_SENDERS } from "../utils/constants";
 import RateLimitMessage from "./RateLimitMessage";
+import "./ChatArea.css";
 
 const MessageBubble = ({ message }) => {
   const isUser =
@@ -22,66 +23,41 @@ const MessageBubble = ({ message }) => {
   // Get the message text - handle both 'text' and 'content' properties
   const messageText = message.text || message.content || "";
 
-  console.log("MessageBubble rendering:", {
-    message,
-    messageText,
-    isUser,
-    isError,
-    isRateLimit,
-  }); // DEBUG
-
-  // This function is no longer needed since we're not showing stats
-  // const handleViewStats = () => {
-  //   // Dispatch an event that App.jsx can listen for to show the usage stats
-  //   const event = new CustomEvent('showRateLimitStats');
-  //   window.dispatchEvent(event);
-  // };
+  const getAvatarIcon = () => {
+    if (isUser) {
+      return <FiUser className="w-4 h-4" />;
+    } else if (isError) {
+      return <FiAlertCircle className="w-4 h-4" />;
+    } else {
+      return <FiMessageCircle className="w-4 h-4" />;
+    }
+  };
 
   return (
     <div
-      className={`flex ${
-        isUser ? "justify-end" : "justify-start"
-      } animate-slide-up`}
+      className={`message-container ${isUser ? "user-message" : "bot-message"}`}
     >
-      <div
-        className={`flex max-w-xs lg:max-w-2xl ${
-          isUser ? "flex-row-reverse" : "flex-row"
-        } items-end space-x-2`}
-      >
+      <div className={`message-wrapper ${isUser ? "user" : "bot"}`}>
         {/* Avatar */}
         <div
-          className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-            isUser
-              ? "bg-blue-500"
-              : isError
-              ? "bg-red-500"
-              : "bg-gradient-to-r from-green-400 to-blue-500"
+          className={`message-avatar ${
+            isUser ? "user" : isError ? "error" : "bot"
           }`}
         >
-          {isUser ? (
-            <FiUser className="w-4 h-4 text-white" />
-          ) : isError ? (
-            <FiAlertCircle className="w-4 h-4 text-white" />
-          ) : (
-            <FiMessageCircle className="w-4 h-4 text-white" />
-          )}
+          {getAvatarIcon()}
         </div>
 
         {/* Message bubble */}
         <div
-          className={`rounded-2xl px-4 py-3 ${
-            isUser
-              ? "bg-blue-500 text-white"
-              : isError
-              ? "bg-red-50 border border-red-200 text-red-700"
-              : "bg-white border border-gray-200 text-gray-900 shadow-sm"
+          className={`message-bubble ${
+            isUser ? "user" : isError ? "error" : "bot"
           }`}
         >
           {/* Rate limit message special handling */}
           {isRateLimit ? (
             <RateLimitMessage message={messageText} />
           ) : (
-            <div className="text-sm leading-relaxed">
+            <div className="message-content">
               {isUser ? (
                 <p>{messageText}</p>
               ) : (
@@ -106,94 +82,71 @@ const MessageBubble = ({ message }) => {
                       <li className="text-sm">{children}</li>
                     ),
                     strong: ({ children }) => (
-                      <strong className="font-semibold text-gray-900">
-                        {children}
-                      </strong>
+                      <strong className="font-semibold">{children}</strong>
                     ),
                     em: ({ children }) => (
                       <em className="italic">{children}</em>
                     ),
                     h1: ({ children }) => (
-                      <h1 className="text-xl font-bold mb-3 mt-4 text-gray-900">
+                      <h1 className="text-base font-bold mb-2 mt-2">
                         {children}
                       </h1>
                     ),
                     h2: ({ children }) => (
-                      <h2 className="text-lg font-bold mb-2 mt-3 text-gray-900">
+                      <h2 className="text-sm font-bold mb-2 mt-2">
                         {children}
                       </h2>
                     ),
                     h3: ({ children }) => (
-                      <h3 className="text-base font-semibold mb-2 mt-2 text-gray-900">
+                      <h3 className="text-sm font-semibold mb-1 mt-1">
                         {children}
                       </h3>
                     ),
+                    code: ({ children }) => (
+                      <code className="bg-black/10 px-2 py-1 rounded text-sm font-mono">
+                        {children}
+                      </code>
+                    ),
+                    pre: ({ children }) => (
+                      <pre className="bg-black/5 p-3 rounded-lg overflow-x-auto mb-2 text-xs">
+                        {children}
+                      </pre>
+                    ),
                     blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-700 my-2">
+                      <blockquote className="border-l-4 border-current pl-4 my-2 opacity-75">
                         {children}
                       </blockquote>
                     ),
                     table: ({ children }) => (
-                      <div className="overflow-x-auto my-4 rounded-lg border border-gray-300">
-                        <table className="min-w-full divide-y divide-gray-300 text-sm">
+                      <div className="overflow-x-auto my-2 rounded-lg border border-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
                           {children}
                         </table>
                       </div>
                     ),
                     thead: ({ children }) => (
-                      <thead className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
-                        {children}
-                      </thead>
+                      <thead className="bg-gray-100">{children}</thead>
                     ),
                     tbody: ({ children }) => (
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="divide-y divide-gray-200">
                         {children}
                       </tbody>
                     ),
-                    tr: ({ children, isHeader }) => (
-                      <tr
-                        className={
-                          isHeader ? "" : "hover:bg-blue-50 transition-colors"
-                        }
-                      >
-                        {children}
-                      </tr>
-                    ),
                     th: ({ children }) => (
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">
+                      <th className="px-4 py-2 text-left text-xs font-semibold">
                         {children}
                       </th>
                     ),
                     td: ({ children }) => (
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {children}
-                      </td>
+                      <td className="px-4 py-2 text-sm">{children}</td>
                     ),
-                    code: ({ inline, children }) =>
-                      inline ? (
-                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono text-red-600">
-                          {children}
-                        </code>
-                      ) : (
-                        <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-xs font-mono">
-                          {children}
-                        </code>
-                      ),
-                    pre: ({ children }) => (
-                      <pre className="my-2 rounded-lg overflow-hidden">
-                        {children}
-                      </pre>
-                    ),
-                    hr: () => <hr className="my-4 border-t border-gray-300" />,
-                    a: ({ children, href }) => (
+                    a: ({ node, ...props }) => (
                       <a
-                        href={href}
+                        {...props}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline"
-                      >
-                        {children}
-                      </a>
+                        className="underline hover:opacity-80"
+                      />
                     ),
                   }}
                 >
@@ -202,48 +155,9 @@ const MessageBubble = ({ message }) => {
               )}
             </div>
           )}
-
-          {/* Timestamp */}
-          <div
-            className={`text-xs mt-2 ${
-              isUser ? "text-blue-100" : "text-gray-500"
-            }`}
-          >
+          <div className="message-timestamp">
             {formatTime(message.timestamp)}
           </div>
-
-          {/* Metadata */}
-          {message.metadata && !isRateLimit && (
-            <div className="mt-2 pt-2 border-t border-gray-200">
-              <div className="text-xs text-gray-500">
-                {message.metadata.source && (
-                  <div>Nguồn: {message.metadata.source}</div>
-                )}
-                {message.metadata.sources &&
-                  message.metadata.sources.length > 0 && (
-                    <div className="mt-1">
-                      <div className="font-medium mb-1">
-                        Trích dẫn từ tài liệu:
-                      </div>
-                      {message.metadata.sources.map((source, index) => (
-                        <div
-                          key={index}
-                          className="p-1 bg-gray-50 rounded mb-1 text-xs"
-                        >
-                          {source.substring(0, 150)}...
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                {message.metadata.confidence && (
-                  <div>
-                    Độ tin cậy: {(message.metadata.confidence * 100).toFixed(1)}
-                    %
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

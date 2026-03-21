@@ -591,7 +591,7 @@ def get_retriever():
     # Define paths
     current_dir = Path(__file__).parent.absolute()
     project_root = current_dir.parent.parent
-    dept_graphs_dir = os.path.join(project_root, "data", "department_graphs")
+    dept_graphs_dir = os.path.join(project_root, "graphs", "department_graphs")
     
     # Check if department graphs exist
     if not os.path.exists(dept_graphs_dir):

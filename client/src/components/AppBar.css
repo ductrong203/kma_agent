@@ -1,153 +1,162 @@
-/* AppBar Styles */
+/* AppBar Styles - Modern LibreChat Design */
 .app-bar {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border-bottom: 3px solid #991b1b;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid #e2e8f0;
   position: sticky;
   top: 0;
   z-index: 1000;
-  height: 80px; /* Explicit height to ensure content below can adjust properly */
+  height: 64px;
 }
 
 .app-bar-content {
-  max-width: 100%; /* Thay đổi từ 1200px thành 100% để đầy màn hình */
+  max-width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.75rem 0.25rem; /* Giảm padding horizontal xuống còn 0.25rem */
-  min-height: 80px;
+  padding: 0 24px;
+  min-height: 64px;
   width: 100%;
 }
 
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* Giảm gap */
-  padding-left: 30px; /* Xóa bỏ padding */
+  gap: 12px;
+  flex: 0 0 auto;
 }
 
 .logo {
-  width: 50px; /* Giảm kích thước logo */
-  height: 50px;
-  border-radius: 50%;
-  border: 3px solid white;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 2px solid #dc2626;
   background: white;
-  padding: 4px;
+  padding: 2px;
   object-fit: contain;
 }
 
 .title-section {
-  color: white;
+  color: #1a202c;
 }
 
 .main-title {
-  font-size: 1.5rem;
+  font-size: 18px;
   font-weight: 700;
   margin: 0;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-  letter-spacing: 0.5px;
+  color: #dc2626;
+  letter-spacing: -0.3px;
 }
 
 .sub-title {
-  font-size: 0.8rem;
-  margin: 0;
-  opacity: 0.9;
+  font-size: 12px;
+  margin: 2px 0 0 0;
+  opacity: 0.6;
   font-weight: 400;
-  margin-top: 2px;
+  color: #718096;
 }
 
 .user-section {
   display: flex;
   align-items: center;
-  padding-right: 30px; /* Giữ padding */
+  gap: 16px;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .mode-switcher {
   display: flex;
   align-items: center;
-  gap: 4px; /* Giảm gap */
-  margin-right: 80px; /* Giảm margin */
+  gap: 8px;
 }
 
 .mode-btn {
   display: flex;
   align-items: center;
-  gap: 4px; /* Giảm gap */
-  padding: 4px 8px; /* Giảm padding */
-  border-radius: 16px;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: white;
-  background-color: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #4a5568;
+  background-color: #edf2f7;
+  border: 1px solid #cbd5e0;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .mode-btn:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: #e2e8f0;
+  border-color: #a0aec0;
 }
 
 .mode-btn.active {
-  background-color: white;
-  color: #b91c1c;
-  border-color: white;
+  background-color: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+.app-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  margin-right: 8px;
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* Giảm gap */
+  gap: 12px;
 }
 
 .welcome-text {
-  color: white;
+  color: #4a5568;
   font-weight: 500;
-  font-size: 0.8rem; /* Giảm font size */
+  font-size: 13px;
 }
 
 .admin-link {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  padding: 0.4rem 0.8rem;
+  gap: 6px;
+  background: #edf2f7;
+  color: #4a5568;
+  border: 1px solid #cbd5e0;
+  padding: 7px 14px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
   text-decoration: none;
 }
 
 .admin-link:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-1px);
+  background: #e2e8f0;
+  border-color: #a0aec0;
 }
 
 .guest-text {
-  color: white;
+  color: #4a5568;
   font-weight: 500;
-  font-size: 1rem;
+  font-size: 13px;
 }
 
 .logout-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  padding: 0.4rem 0.8rem; /* Giảm padding */
+  background: #fed7d7;
+  color: #c53030;
+  border: 1px solid #fc8181;
+  padding: 7px 14px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem; /* Giảm font size */
+  font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
 }
 
 .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #f5a5a5;
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-1px);
 }
@@ -161,6 +170,67 @@
   display: none; /* Ẩn nếu không sử dụng */
 }
 
+/* Dark Mode Support */
+html.dark .app-bar {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+  border-bottom-color: #374151;
+}
+
+html.dark .title-section {
+  color: #9ca3af;
+}
+
+html.dark .main-title {
+  color: #ef4444;
+}
+
+html.dark .sub-title {
+  color: #6b7280;
+}
+
+html.dark .mode-btn {
+  background-color: #374151;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+html.dark .mode-btn:hover {
+  background-color: #4b5563;
+  border-color: #6b7280;
+}
+
+html.dark .mode-btn.active {
+  background-color: #dc2626;
+  color: white;
+  border-color: #dc2626;
+}
+
+html.dark .welcome-text {
+  color: #d1d5db;
+}
+
+html.dark .admin-link {
+  background: #374151;
+  color: #e5e7eb;
+  border-color: #4b5563;
+}
+
+html.dark .admin-link:hover {
+  background: #4b5563;
+  border-color: #6b7280;
+}
+
+html.dark .logout-btn {
+  background: rgba(220, 38, 38, 0.2);
+  color: #ef4444;
+  border-color: #dc2626;
+}
+
+html.dark .logout-btn:hover {
+  background: rgba(220, 38, 38, 0.3);
+  border-color: #ef4444;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .app-bar-content {
@@ -171,7 +241,7 @@
   .logo-section {
     padding-left: 0; /* Loại bỏ padding */
   }
-  
+
   .user-section {
     padding-right: 0; /* Loại bỏ padding */
   }
@@ -204,7 +274,7 @@
     gap: 0.3rem; /* Giảm gap */
     padding-left: 0; /* Loại bỏ padding */
   }
-  
+
   .user-section {
     padding-right: 0; /* Loại bỏ padding */
   }

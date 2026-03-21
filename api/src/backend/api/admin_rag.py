@@ -349,7 +349,7 @@ async def rebuild_rag_index(current_user: dict = Depends(get_current_user)):
         
         # Get project root and output folder
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        output_folder = os.path.join(project_root, "document_graph")
+        output_folder = os.path.join(project_root, "graphs", "document_graph")
         os.makedirs(output_folder, exist_ok=True)
         
         # Step 1: Load documents with table-aware chunking
@@ -461,7 +461,7 @@ async def rebuild_department_rag_index(
         
         # Get project root and output folder
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        output_folder = os.path.join(project_root, "department_graphs")
+        output_folder = os.path.join(project_root, "graphs", "department_graphs")
         
         # Get available departments dynamically - scan for actual department folders including 'default'
         available_departments = []

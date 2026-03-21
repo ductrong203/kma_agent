@@ -8,6 +8,7 @@ import {
   FiFolder,
 } from "react-icons/fi";
 import { Link } from "react-router-dom";
+import DarkModeToggle from "./DarkModeToggle";
 
 const AppBar = ({
   user,
@@ -15,6 +16,8 @@ const AppBar = ({
   viewMode,
   onSwitchMode,
   handleSummaryClick,
+  isDarkMode,
+  onToggleDarkMode,
 }) => {
   return (
     <div className="app-bar">
@@ -55,6 +58,13 @@ const AppBar = ({
             >
               <FiAlignLeft /> Tóm tắt
             </button>
+          </div>
+
+          <div className="app-bar-controls">
+            <DarkModeToggle
+              isDarkMode={isDarkMode}
+              onToggle={onToggleDarkMode}
+            />
           </div>
 
           {user ? (

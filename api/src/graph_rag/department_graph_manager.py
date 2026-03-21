@@ -282,8 +282,9 @@ class DepartmentGraphManager:
         
         loaded_count = 0
         
-        # Special handling for document_graph at root level
-        document_graph_dir = "document_graph"
+        # Special handling for document_graph (located in parent directory of base_output_dir)
+        graphs_root = os.path.dirname(self.base_output_dir)
+        document_graph_dir = os.path.join(graphs_root, "document_graph")
         if os.path.exists(document_graph_dir) and os.path.isdir(document_graph_dir):
             try:
                 # Look for graph files in document_graph directory

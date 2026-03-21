@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Test imports to debug the issue"""
+"""Test imports and function calls to debug the issue"""
 import sys
 import os
 import io
@@ -29,6 +29,7 @@ try:
 except Exception as e:
     print(f"   ✗ Failed: {type(e).__name__}: {e}")
     traceback.print_exc()
+    sys.exit(1)
 
 try:
     print("\n2. Trying to import api.src.graph_rag.graph_builder...")
@@ -37,5 +38,21 @@ try:
 except Exception as e:
     print(f"   ✗ Failed: {type(e).__name__}: {e}")
     traceback.print_exc()
+    sys.exit(1)
 
-print("\nDone!")
+try:
+    print("\n3. Trying to call load_documents_from_folder...")
+    data_folder = project_root / "api" / "data"
+    docs = load_documents_from_folder(
+        data_folder=str(data_folder),
+        chunk_size=800,
+        chunk_overlap=200
+    )
+    print(f"   ✓ Success! Loaded {len(docs)} documents")
+except Exception as e:
+    print(f"   ✗ Failed: {type(e).__name__}: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+
+print("\nAll tests passed!")
+

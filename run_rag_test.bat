@@ -57,17 +57,15 @@ if "%choice%"=="2" (
     echo (This will modify test_rag_comparison.py temporarily)
     echo.
     
-    REM Create temporary script with num_samples=10
-    for /f "tokens=*" %%a in (test_rag_comparison.py) do (
-        set "line=%%a"
-        setlocal enabledelayedexpansion
-        if "!line:num_samples: None!" neq "!line!" (
-            echo !line:num_samples: None=num_samples: 10!
-        ) else (
-            echo !line!
-        )
-        endlocal
-    ) > test_rag_comparison_temp.py
+    REM Use Python to modify the file instead of batch string manipulation
+    python -c "
+import re
+with open('test_rag_comparison.py', 'r') as f:
+    content = f.read()
+content = re.sub(r'num_samples\s*:\s*None', 'num_samples: 10', content)
+with open('test_rag_comparison_temp.py', 'w') as f:
+    f.write(content)
+"
     
     python test_rag_comparison_temp.py
     del test_rag_comparison_temp.py

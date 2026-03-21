@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Build Traditional RAG Vector Database (FAISS + BM25) - Reusing Existing Retriever
 Sử dụng MetadataEnhancedHybridRetriever và table-aware chunking có sẵn
 """
 import sys
 import os
+import io
+
+# Force UTF-8 encoding for stdout on Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 import time
 import pickle
 from pathlib import Path

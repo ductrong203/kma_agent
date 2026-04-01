@@ -396,16 +396,18 @@ async def rebuild_rag_index(current_user: dict = Depends(get_current_user)):
         
         # Step 4: Reload ReActGraph agent
         logger.info("Reloading ReActGraph agent...")
-        from backend.api.chat import agent
-        from agent.supervisor_agent import ReActGraph
+        from ...agent.supervisor_agent import ReActGraph
+        import sys
+        
+        # We need to import the agent module safely 
+        import backend.api.chat as chat_module
         
         # Reinitialize agent with new graph
         new_agent = ReActGraph()
         new_agent.create_graph()
         
         # Reassign global agent variable in chat module
-        import backend.api.chat
-        backend.api.chat.agent = new_agent
+        chat_module.agent = new_agent
         
         logger.info("ReActGraph agent reloaded successfully")
         

@@ -4,8 +4,43 @@ import LoginAppBar from "./LoginAppBar";
 import authService from "../services/authService";
 import { useLocation } from "react-router-dom";
 
-const Login = ({ onLogin, adminMode = false }) => {
-  const [isLoginMode, setIsLoginMode] = useState(true);
+// ---- SVG Icons for Social Login ----
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20">
+    <path
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+      fill="#4285F4"
+    />
+    <path
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      fill="#34A853"
+    />
+    <path
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      fill="#FBBC05"
+    />
+    <path
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      fill="#EA4335"
+    />
+  </svg>
+);
+
+const GitHubIcon = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="#333">
+    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+  </svg>
+);
+
+const Login = ({
+  onLogin,
+  adminMode = false,
+  initialMode,
+  onBackToLanding,
+}) => {
+  const [isLoginMode, setIsLoginMode] = useState(
+    initialMode === "register" ? false : true
+  );
   const [isAdminMode, setIsAdminMode] = useState(adminMode);
   const location = useLocation();
   const [formData, setFormData] = useState({
@@ -20,14 +55,10 @@ const Login = ({ onLogin, adminMode = false }) => {
   // Kiểm tra nếu đang ở trang admin từ URL
   useEffect(() => {
     const path = location?.pathname || "";
-    console.log("Current path:", path);
-
     if (path.includes("/admin") || adminMode) {
-      console.log("Setting admin mode to true");
       setIsAdminMode(true);
-      setIsLoginMode(true); // Admin luôn ở chế độ đăng nhập
+      setIsLoginMode(true);
     } else {
-      console.log("Setting admin mode to false");
       setIsAdminMode(false);
     }
   }, [location, adminMode]);
@@ -38,7 +69,7 @@ const Login = ({ onLogin, adminMode = false }) => {
       ...prev,
       [name]: value,
     }));
-    setError(""); // Clear error when user types
+    setError("");
   };
 
   const handleSubmit = async (e) => {
@@ -48,9 +79,8 @@ const Login = ({ onLogin, adminMode = false }) => {
 
     try {
       if (isLoginMode) {
-        // Login validation
         if (!formData.username?.trim() || !formData.password?.trim()) {
-          setError("Vui lòng nhập đầy đủ username và password");
+          setError("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu");
           setIsLoading(false);
           return;
         }
@@ -62,20 +92,16 @@ const Login = ({ onLogin, adminMode = false }) => {
 
         if (result.success) {
           const user = result.data;
-
-          // Kiểm tra quyền admin nếu đang ở trang admin
           if (isAdminMode && user.role !== "admin") {
             setError("Bạn không có quyền truy cập vào trang quản trị");
             setIsLoading(false);
             return;
           }
-
           onLogin(user);
         } else {
           setError(result.error);
         }
       } else {
-        // Registration validation
         if (
           !formData.username?.trim() ||
           !formData.email?.trim() ||
@@ -85,17 +111,15 @@ const Login = ({ onLogin, adminMode = false }) => {
           setError("Vui lòng điền đầy đủ thông tin bắt buộc");
           return;
         }
-        // Kiểm tra email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
-          setError("Email không hợp lệ");
+          setError("Địa chỉ email không hợp lệ");
           return;
         }
         if (formData.password !== formData.confirmPassword) {
           setError("Mật khẩu xác nhận không khớp");
           return;
         }
-
         if (formData.password.length < 6) {
           setError("Mật khẩu phải có ít nhất 6 ký tự");
           return;
@@ -108,7 +132,6 @@ const Login = ({ onLogin, adminMode = false }) => {
         });
 
         if (result.success) {
-          // Reset form và chuyển về login mode
           setFormData({
             username: "",
             email: "",
@@ -117,25 +140,23 @@ const Login = ({ onLogin, adminMode = false }) => {
           });
           setIsLoginMode(true);
           setError("");
-          alert("Đăng ký thành công! Hãy đăng nhập với username vừa đăng ký.");
+          alert(
+            "Đăng ký thành công! Hãy đăng nhập với tài khoản vừa tạo."
+          );
         } else {
           setError(result.error);
         }
       }
     } catch (err) {
       console.error("Auth error:", err);
-      setError("Có lỗi xảy ra. Vui lòng thử lại.");
+      setError("Có lỗi xảy ra. Vui lòng thử lại sau.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const toggleMode = () => {
-    // Không cho phép chuyển sang chế độ đăng ký nếu đang ở trang admin
-    if (isAdminMode) {
-      return;
-    }
-
+    if (isAdminMode) return;
     setIsLoginMode(!isLoginMode);
     setFormData({
       username: "",
@@ -146,29 +167,85 @@ const Login = ({ onLogin, adminMode = false }) => {
     setError("");
   };
 
+  const handleSocialLogin = (provider) => {
+    // Placeholder — cần tích hợp OAuth thực tế
+    alert(
+      `Tính năng đăng nhập bằng ${provider} đang được phát triển. Vui lòng sử dụng tài khoản hệ thống.`
+    );
+  };
+
   return (
     <div className="login-page">
-      <LoginAppBar />
+      <LoginAppBar onBackToLanding={onBackToLanding} />
+
+      {/* Background orbs */}
+      <div className="login-bg-orb login-bg-orb-1" />
+      <div className="login-bg-orb login-bg-orb-2" />
 
       <div className="login-container">
         <div className="login-card">
+          {/* Logo */}
+          <div className="login-logo-area">
+            <div className="login-logo-icon">
+              <img src="/img/kma.png" alt="Logo Học viện Kỹ thuật Mật mã" />
+            </div>
+          </div>
+
+          {/* Header */}
           <div className="login-header">
             <h2 className="login-title">
               {isAdminMode
                 ? "Đăng nhập quản trị"
                 : isLoginMode
-                ? "Đăng nhập hệ thống"
-                : "Đăng ký tài khoản"}
+                ? "Chào mừng trở lại!"
+                : "Tạo tài khoản mới"}
             </h2>
             <p className="login-subtitle">
               {isAdminMode
-                ? "Quản trị hệ thống Chatbot - Học viện Kỹ thuật Mật mã"
+                ? "Quản trị hệ thống ACTVN-AGENT"
                 : isLoginMode
-                ? "Chatbot AI - Học viện Kỹ thuật Mật mã"
-                : "Tạo tài khoản mới để sử dụng hệ thống"}
+                ? "Đăng nhập để sử dụng trợ lý ảo ACTVN-AGENT"
+                : "Đăng ký để bắt đầu trải nghiệm AI Chatbot"}
             </p>
           </div>
 
+          {/* Social Login — chỉ hiện khi không phải admin */}
+          {!isAdminMode && (
+            <>
+              <div className="social-login-section">
+                <div className="social-btn-group">
+                  <button
+                    type="button"
+                    className="social-btn social-btn-google"
+                    onClick={() => handleSocialLogin("Google")}
+                  >
+                    <GoogleIcon />
+                    {isLoginMode
+                      ? "Đăng nhập với Google"
+                      : "Đăng ký với Google"}
+                  </button>
+                  <button
+                    type="button"
+                    className="social-btn social-btn-github"
+                    onClick={() => handleSocialLogin("GitHub")}
+                  >
+                    <GitHubIcon />
+                    {isLoginMode
+                      ? "Đăng nhập với GitHub"
+                      : "Đăng ký với GitHub"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="auth-divider">
+                <div className="auth-divider-line" />
+                <span className="auth-divider-text">hoặc</span>
+                <div className="auth-divider-line" />
+              </div>
+            </>
+          )}
+
+          {/* Form */}
           <form onSubmit={handleSubmit} className="login-form">
             {error && (
               <div className="error-message">
@@ -190,12 +267,14 @@ const Login = ({ onLogin, adminMode = false }) => {
                 className="form-input"
                 placeholder="Nhập tên đăng nhập..."
                 required
+                autoComplete="username"
               />
             </div>
+
             {!isLoginMode && (
               <div className="form-group">
                 <label htmlFor="email" className="form-label">
-                  Email *
+                  Email
                 </label>
                 <input
                   type="email"
@@ -204,11 +283,13 @@ const Login = ({ onLogin, adminMode = false }) => {
                   value={formData.email || ""}
                   onChange={handleInputChange}
                   className="form-input"
-                  placeholder="Nhập email..."
+                  placeholder="Nhập địa chỉ email..."
                   required={!isLoginMode}
+                  autoComplete="email"
                 />
               </div>
             )}
+
             <div className="form-group">
               <label htmlFor="password" className="form-label">
                 Mật khẩu
@@ -222,12 +303,14 @@ const Login = ({ onLogin, adminMode = false }) => {
                 className="form-input"
                 placeholder="Nhập mật khẩu..."
                 required
+                autoComplete={isLoginMode ? "current-password" : "new-password"}
               />
             </div>
+
             {!isLoginMode && (
               <div className="form-group">
                 <label htmlFor="confirmPassword" className="form-label">
-                  Xác nhận mật khẩu *
+                  Xác nhận mật khẩu
                 </label>
                 <input
                   type="password"
@@ -238,6 +321,7 @@ const Login = ({ onLogin, adminMode = false }) => {
                   className="form-input"
                   placeholder="Nhập lại mật khẩu..."
                   required={!isLoginMode}
+                  autoComplete="new-password"
                 />
               </div>
             )}
@@ -249,22 +333,24 @@ const Login = ({ onLogin, adminMode = false }) => {
             >
               {isLoading ? (
                 <>
-                  <span className="loading-spinner"></span>
+                  <span className="loading-spinner" />
                   {isLoginMode ? "Đang đăng nhập..." : "Đang đăng ký..."}
                 </>
               ) : isLoginMode ? (
                 "Đăng nhập"
               ) : (
-                "Đăng ký"
+                "Tạo tài khoản"
               )}
             </button>
           </form>
 
-          {/* Form Switch - Chỉ hiển thị khi KHÔNG ở chế độ admin và ở chế độ đăng nhập */}
+          {/* Form Switch */}
           <div className="form-switch">
             {!isAdminMode && (
               <p>
-                {isLoginMode ? "Chưa có tài khoản?" : "Đã có tài khoản?"}
+                {isLoginMode
+                  ? "Chưa có tài khoản?"
+                  : "Đã có tài khoản?"}
                 <button
                   type="button"
                   onClick={toggleMode}
@@ -276,11 +362,15 @@ const Login = ({ onLogin, adminMode = false }) => {
             )}
           </div>
 
+          {/* Footer */}
           <div className="login-footer">
             <p className="help-text">
               Cần hỗ trợ? Liên hệ:
-              <a href="mailto:support@kma.edu.vn" className="help-link">
-                support@kma.edu.vn
+              <a
+                href="mailto:ductrongbui1213@gmail.com"
+                className="help-link"
+              >
+                ductrongbui1213@gmail.com
               </a>
             </p>
           </div>

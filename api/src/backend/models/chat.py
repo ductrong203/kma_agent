@@ -61,11 +61,33 @@ class Conversation(BaseModel):
         "json_encoders": {ObjectId: str}
     }
 
+# Attachment model for files
+class AttachmentSchema(BaseModel):
+    file_id: str
+    filename: str
+    size: int
+    mime_type: str
+    status: str = "ready"  # 'uploaded', 'processing', 'ready', 'failed'
+
+class FileMetadataResponse(BaseModel):
+    file_id: str
+    filename: str
+    original_filename: str
+    size: int
+    mime_type: str
+    user_id: str
+    conversation_id: Optional[str] = None
+    created_at: datetime
+    status: str
+    embedding_count: int
+    last_indexed: Optional[datetime] = None
+
 # Request and response models for API
 class MessageCreate(BaseModel):
     content: str
     is_user: bool = True
     department: Optional[str] = None  # 'phongdaotao', 'phongkhaothi', or None for all
+    attachments: Optional[List[str]] = []  # List of file_ids
 
 class MessageQuickChat(BaseModel):
     content: str
@@ -84,6 +106,7 @@ class MessageResponse(BaseModel):
     content: str
     is_user: bool
     created_at: datetime
+    attachments: Optional[List[AttachmentSchema]] = []
     
     model_config = {
         "populate_by_name": True

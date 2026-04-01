@@ -10,9 +10,9 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
 from .state import MyAgentState
-from ..llm.config import get_gemini_llm, get_llm
-from ..rag import create_rag_tool
-from ..score import get_student_scores, get_student_info, calculate_average_scores
+from llm.config import get_gemini_llm, get_llm
+from rag import create_rag_tool
+from score import get_student_scores, get_student_info, calculate_average_scores
 
 load_dotenv()
 
@@ -78,6 +78,16 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
     if len(messages) < 1:
         return state
     
+    # Get the latest user query
+    latest_query = messages[-1].content
+    
+    # CRITICAL: Check if message has file attachment context
+    # If it does, SKIP reformulation to preserve the [DOCUMENT CONTEXT] marker
+    has_file_context = "[DOCUMENT CONTEXT]" in latest_query
+    if has_file_context:
+        logger.info("📎 File context detected in query - SKIPPING reformulation to preserve [DOCUMENT CONTEXT] marker")
+        return state
+    
     # The conversational context prompt helps rewrite the latest query with context
     llm = get_llm()  # Use factory method to support runtime model switching
     
@@ -86,9 +96,6 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
     for i, msg in enumerate(messages[:-1]):  # Exclude the most recent message
         prefix = "[bot]" if isinstance(msg, AIMessage) else "[user]"
         chat_history.append(f"{prefix} {msg.content}")
-    
-    # Get the latest user query
-    latest_query = messages[-1].content
 
     logger.info("--- AGENT: Summarizing conversation history ---")
     logger.info(f"Latest query: {latest_query}")
@@ -144,7 +151,9 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
     logger.info(f"Available tools: {[tool.name for tool in tools]}")
     logger.info(f"Tool descriptions length: {len(tool_descriptions)}")
     
-    # FORCE tool call for ALL queries EXCEPT personal student score queries
+    # FORCE tool call for ALL queries EXCEPT:
+    # 1. Personal student score queries
+    # 2. Queries with file attachments (already augmented with context)
     last_message = state["messages"][-1] if state["messages"] else None
     force_rag_tool = False
     
@@ -152,33 +161,44 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
         query_lower = last_message.content.lower()
         query = last_message.content
         
-        # Detect student code patterns (AT170139, CT180456, DT190789, etc.)
-        import re
-        student_code_pattern = re.compile(r'\b[ACDMT]T\d{6}\b', re.IGNORECASE)
-        has_student_code = bool(student_code_pattern.search(query))
+        # Check if message already has file attachment context
+        has_file_context = "[DOCUMENT CONTEXT]" in query
+        logger.info(f"📎 File context in message: {has_file_context}")
         
-        # Check if this is a PERSONAL query (score OR info - needs student_code)
-        personal_score_keywords = ['điểm của', 'điểm em', 'điểm tôi', 'điểm mình', 'điểm sinh viên', 
-                                   'gpa của', 'gpa em', 'gpa tôi', 'gpa mình',
-                                   'xem điểm', 'tra điểm', 'kiểm tra điểm']
-        personal_info_keywords = ['thông tin của', 'thông tin em', 'thông tin tôi', 'thông tin sinh viên',
-                                  'lớp của', 'lớp em', 'lớp tôi',
-                                  'họ tên của', 'họ tên em', 'tên của', 'tên em']
-        
-        is_personal_score = any(kw in query_lower for kw in personal_score_keywords) and has_student_code
-        is_personal_info = any(kw in query_lower for kw in personal_info_keywords) and has_student_code
-        
-        # FORCE search_kma_regulations for EVERYTHING EXCEPT personal queries
-        if not (is_personal_score or is_personal_info):
-            force_rag_tool = True
-            logger.info(f"🔴 FORCING search_kma_regulations for: {query[:100]}...")
+        if has_file_context:
+            logger.info("✅ Message has file attachment context, skipping force RAG tool")
+            force_rag_tool = False
+        else:
+            # Detect student code patterns (AT170139, CT180456, DT190789, etc.)
+            import re
+            student_code_pattern = re.compile(r'\b[ACDMT]T\d{6}\b', re.IGNORECASE)
+            has_student_code = bool(student_code_pattern.search(query))
+            
+            # Check if this is a PERSONAL query (score OR info - needs student_code)
+            personal_score_keywords = ['điểm của', 'điểm em', 'điểm tôi', 'điểm mình', 'điểm sinh viên', 
+                                       'gpa của', 'gpa em', 'gpa tôi', 'gpa mình',
+                                       'xem điểm', 'tra điểm', 'kiểm tra điểm']
+            personal_info_keywords = ['thông tin của', 'thông tin em', 'thông tin tôi', 'thông tin sinh viên',
+                                      'lớp của', 'lớp em', 'lớp tôi',
+                                      'họ tên của', 'họ tên em', 'tên của', 'tên em']
+            
+            is_personal_score = any(kw in query_lower for kw in personal_score_keywords) and has_student_code
+            is_personal_info = any(kw in query_lower for kw in personal_info_keywords) and has_student_code
+            
+            # FORCE search_kma_regulations for EVERYTHING EXCEPT personal queries
+            if not (is_personal_score or is_personal_info):
+                force_rag_tool = True
+                logger.info(f"🔴 FORCING search_kma_regulations for: {query[:100]}...")
     
     # If forcing tool call, inject it directly
     if force_rag_tool:
         from langchain_core.messages import ToolMessage
         
-        # Extract query
+        # Extract query (remove document context if present)
         query = last_message.content
+        if "[DOCUMENT CONTEXT]" in query:
+            # This shouldn't happen since we check earlier, but just in case
+            query = query.split("[DOCUMENT CONTEXT]")[0].strip()
         
         # Use department from state if provided, otherwise detect from keywords
         department = state.get('department')
@@ -227,24 +247,35 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
 
 ### VÍ DỤ MINH HỌA (BẮT BUỘC HỌC THEO)
 
-**Ví dụ 1: Câu hỏi về quy định**
+**Ví dụ 1: Câu hỏi về quy định (NO FILE CONTEXT)**
 User: "Những hành vi nào bị đình chỉ thi?"
 Assistant: [Phải gọi search_kma_regulations]
 Action: search_kma_regulations
 Action Input: query="hành vi bị đình chỉ thi", department="phongkhaothi"
 
-**Ví dụ 2: Câu hỏi về điều kiện**
+**Ví dụ 2: Câu hỏi về điều kiện (NO FILE CONTEXT)**
 User: "Điều kiện tốt nghiệp là gì?"
 Assistant: [Phải gọi search_kma_regulations]
 Action: search_kma_regulations
 Action Input: query="điều kiện tốt nghiệp", department="phongdaotao"
 
-**Ví dụ 3: Câu hỏi về thủ tục**
-User: "Thủ tục phúc khảo như thế nào?"
-Assistant: [Phải gọi search_kma_regulations]
-Action: search_kma_regulations
-Action Input: query="thủ tục phúc khảo", department="phongkhaothi"
-"""
+**Ví dụ 3: Câu hỏi về tài liệu được upload (HAS FILE CONTEXT)**
+User: "Giải thích chi tiết hơn về điều này"
+[User has uploaded a document with context, message contains [DOCUMENT CONTEXT] section]
+Assistant: [Không cần gọi tool, đã có document context, trả lời trực tiếp dựa trên tài liệu]
+Trả lời: "Dựa trên tài liệu bạn đã upload, điểm chính là..."
+
+**Ví dụ 4: Câu hỏi cụ thể về tài liệu (HAS FILE CONTEXT)**
+User: "Điểm nào quan trọng nhất trong tài liệu này?"
+[User has uploaded a document]
+Assistant: [Sử dụng thông tin từ [DOCUMENT CONTEXT], không gọi search_kma_regulations]
+Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhất là..."
+
+📋 QUY TẮC QUAN TRỌNG:
+1. ✅ Nếu message chứa [DOCUMENT CONTEXT]: Trả lời trực tiếp dựa trên tài liệu, KHÔNG gọi search_kma_regulations
+2. ✅ Nếu không có [DOCUMENT CONTEXT] và là câu hỏi về quy định: Gọi search_kma_regulations
+3. ✅ Nếu là câu hỏi về điểm cá nhân + có student code: Gọi score tool
+4. ⚠️ KHÔNG bao giờ bỏ qua tài liệu được upload - đó là ưu tiên hàng đầu"""
     
     enhanced_prompt = react_prompt.format(tool_descriptions=tool_descriptions) + few_shot_examples
     
@@ -253,7 +284,21 @@ Action Input: query="thủ tục phúc khảo", department="phongkhaothi"
          MessagesPlaceholder(variable_name="messages"), ])
 
     # Bind tools and structured output - use factory method for runtime model switching
-    model_with_tools = get_llm().bind_tools(tools)
+    # Check if message has file context - if so, don't bind tools
+    has_file_context = False
+    last_msg = state["messages"][-1] if state["messages"] else None
+    if last_msg and isinstance(last_msg, HumanMessage):
+        has_file_context = "[DOCUMENT CONTEXT]" in last_msg.content
+    
+    logger.info(f"📎 Has file context in LLM call: {has_file_context}")
+    
+    # Bind tools only if no file context
+    if has_file_context:
+        logger.info("⏭️  Skipping tool binding - file context present, direct LLM response")
+        model_with_tools = get_llm()  # No tools
+    else:
+        model_with_tools = get_llm().bind_tools(tools)
+    
     chains = prompt | model_with_tools
 
     try:

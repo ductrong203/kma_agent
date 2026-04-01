@@ -1,28 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  FiHome, FiUsers, FiSettings, FiBarChart2, 
-  FiClock, FiDatabase, FiAlertCircle, FiSliders,
-  FiLogOut, FiMenu, FiX, FiUserCheck, FiBook
-} from 'react-icons/fi';
-import { useNavigate } from 'react-router-dom';
-import './AdminDashboard.css';
-import Login from '../Login';
-import UsageStatistics from './UsageStatistics';
-import ConversationLogs from './ConversationLogs';
-import UserManagement from './UserManagement';
-import RateLimiting from './RateLimiting';
-import ModelManagement from './ModelManagement';
-import RagManagement from './RagManagement';
-import authService from '../../services/authService';
+import React, { useState, useEffect } from "react";
+import {
+  FiUsers,
+  FiBarChart2,
+  FiClock,
+  FiDatabase,
+  FiAlertCircle,
+  FiLogOut,
+  FiMenu,
+  FiX,
+  FiUserCheck,
+  FiBook,
+} from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
+import "./AdminDashboard.css";
+import Login from "../Login";
+import UsageStatistics from "./UsageStatistics";
+import ConversationLogs from "./ConversationLogs";
+import UserManagement from "./UserManagement";
+import RateLimiting from "./RateLimiting";
+import ModelManagement from "./ModelManagement";
+import RagManagement from "./RagManagement";
+import authService from "../../services/authService";
 
 // Admin Dashboard Views
 const VIEWS = {
-  STATS: 'statistics',
-  USERS: 'users',
-  LOGS: 'logs',
-  RATE_LIMITS: 'rate-limits',
-  MODEL_MANAGEMENT: 'models',
-  RAG_MANAGEMENT: 'rag',
+  STATS: "statistics",
+  USERS: "users",
+  LOGS: "logs",
+  RATE_LIMITS: "rate-limits",
+  MODEL_MANAGEMENT: "models",
+  RAG_MANAGEMENT: "rag",
 };
 
 const AdminDashboard = () => {
@@ -36,12 +43,12 @@ const AdminDashboard = () => {
     const checkAuth = async () => {
       if (authService.isAuthenticated()) {
         const currentUser = authService.getCurrentUser();
-        if (currentUser && currentUser.role === 'admin') {
+        if (currentUser && currentUser.role === "admin") {
           setUser(currentUser);
         }
       }
     };
-    
+
     checkAuth();
   }, []);
 
@@ -53,7 +60,7 @@ const AdminDashboard = () => {
     authService.logout();
     setUser(null);
     // Chuyển hướng về trang chủ
-    navigate('/');
+    navigate("/");
   };
 
   const toggleMobileMenu = () => {
@@ -88,25 +95,28 @@ const AdminDashboard = () => {
   return (
     <div className="admin-dashboard">
       {/* Mobile menu toggle */}
-      <button 
-        className="mobile-menu-toggle" 
-        onClick={toggleMobileMenu}
-      >
+      <button className="mobile-menu-toggle" onClick={toggleMobileMenu}>
         {isMobileMenuOpen ? <FiX /> : <FiMenu />}
       </button>
 
       {/* Sidebar */}
-      <aside className={`admin-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+      <aside
+        className={`admin-sidebar ${isMobileMenuOpen ? "mobile-open" : ""}`}
+      >
         <div className="admin-sidebar-header">
-          <img src="/assets/kma-logo.svg" alt="KMA Logo" className="admin-logo" />
+          <img
+            src="/assets/kma-logo.svg"
+            alt="KMA Logo"
+            className="admin-logo"
+          />
           <h2>Quản trị Chatbot</h2>
         </div>
-        
+
         <nav className="admin-nav">
           <ul>
             <li>
-              <button 
-                className={activeView === VIEWS.STATS ? 'active' : ''} 
+              <button
+                className={activeView === VIEWS.STATS ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.STATS);
                   setIsMobileMenuOpen(false);
@@ -117,8 +127,8 @@ const AdminDashboard = () => {
               </button>
             </li>
             <li>
-              <button 
-                className={activeView === VIEWS.USERS ? 'active' : ''} 
+              <button
+                className={activeView === VIEWS.USERS ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.USERS);
                   setIsMobileMenuOpen(false);
@@ -129,8 +139,8 @@ const AdminDashboard = () => {
               </button>
             </li>
             <li>
-              <button 
-                className={activeView === VIEWS.LOGS ? 'active' : ''} 
+              <button
+                className={activeView === VIEWS.LOGS ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.LOGS);
                   setIsMobileMenuOpen(false);
@@ -141,8 +151,8 @@ const AdminDashboard = () => {
               </button>
             </li>
             <li>
-              <button 
-                className={activeView === VIEWS.RATE_LIMITS ? 'active' : ''} 
+              <button
+                className={activeView === VIEWS.RATE_LIMITS ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.RATE_LIMITS);
                   setIsMobileMenuOpen(false);
@@ -153,8 +163,10 @@ const AdminDashboard = () => {
               </button>
             </li>
             <li>
-              <button 
-                className={activeView === VIEWS.MODEL_MANAGEMENT ? 'active' : ''} 
+              <button
+                className={
+                  activeView === VIEWS.MODEL_MANAGEMENT ? "active" : ""
+                }
                 onClick={() => {
                   setActiveView(VIEWS.MODEL_MANAGEMENT);
                   setIsMobileMenuOpen(false);
@@ -165,8 +177,8 @@ const AdminDashboard = () => {
               </button>
             </li>
             <li>
-              <button 
-                className={activeView === VIEWS.RAG_MANAGEMENT ? 'active' : ''} 
+              <button
+                className={activeView === VIEWS.RAG_MANAGEMENT ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.RAG_MANAGEMENT);
                   setIsMobileMenuOpen(false);
@@ -178,7 +190,7 @@ const AdminDashboard = () => {
             </li>
           </ul>
         </nav>
-        
+
         <div className="admin-sidebar-footer">
           <div className="admin-user-info">
             <FiUserCheck />
@@ -195,24 +207,22 @@ const AdminDashboard = () => {
       <main className="admin-content">
         <header className="admin-content-header">
           <h1>
-            {activeView === VIEWS.STATS && 'Thống kê sử dụng'}
-            {activeView === VIEWS.USERS && 'Quản lý người dùng'}
-            {activeView === VIEWS.LOGS && 'Lịch sử hội thoại'}
-            {activeView === VIEWS.RATE_LIMITS && 'Giới hạn tốc độ'}
-            {activeView === VIEWS.MODEL_MANAGEMENT && 'Quản lý mô hình LLM'}
-            {activeView === VIEWS.RAG_MANAGEMENT && 'Quản lý dữ liệu RAG'}
+            {activeView === VIEWS.STATS && "Thống kê sử dụng"}
+            {activeView === VIEWS.USERS && "Quản lý người dùng"}
+            {activeView === VIEWS.LOGS && "Lịch sử hội thoại"}
+            {activeView === VIEWS.RATE_LIMITS && "Giới hạn tốc độ"}
+            {activeView === VIEWS.MODEL_MANAGEMENT && "Quản lý mô hình LLM"}
+            {activeView === VIEWS.RAG_MANAGEMENT && "Quản lý dữ liệu RAG"}
           </h1>
         </header>
-        
-        <div className="admin-content-body">
-          {renderContent()}
-        </div>
+
+        <div className="admin-content-body">{renderContent()}</div>
       </main>
-      
+
       {/* Mobile menu overlay */}
       {isMobileMenuOpen && (
-        <div 
-          className="mobile-menu-overlay" 
+        <div
+          className="mobile-menu-overlay"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}

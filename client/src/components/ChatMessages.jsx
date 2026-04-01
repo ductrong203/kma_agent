@@ -4,7 +4,7 @@ import TypingIndicator from './TypingIndicator';
 
 const ChatMessages = ({ messages, isLoading, messagesEndRef }) => {
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+    <div className="chat-messages-stream">
       {messages.map((message) => (
         <MessageBubble 
           key={message.id} 

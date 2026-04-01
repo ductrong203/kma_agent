@@ -1,13 +1,16 @@
-/* Login AppBar Styles */
+/* Login AppBar — Modern Style matching Landing Page */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap');
+
 .login-appbar {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  background: linear-gradient(135deg, #c2185b 0%, #880e4f 50%, #4a148c 100%);
+  box-shadow: 0 4px 30px rgba(194, 24, 91, 0.25);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  height: 80px;
+  height: 72px;
+  backdrop-filter: blur(10px);
 }
 
 .login-appbar-content {
@@ -28,36 +31,64 @@
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+}
+
+.back-to-landing-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.back-to-landing-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(-2px);
 }
 
 .appbar-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 4px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.appbar-logo:hover {
+  transform: scale(1.05);
 }
 
 .title-section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .appbar-title {
   color: white;
-  font-size: 20px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.05rem;
   font-weight: 700;
   margin: 0;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .appbar-subtitle {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
-  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 500;
   margin: 0;
-  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .login-appbar-right {
@@ -74,65 +105,65 @@
 
 .system-name {
   color: white;
-  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.82rem;
   font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .system-version {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 8px;
-  border-radius: 12px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.6rem;
   font-weight: 500;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.5px;
 }
 
-/* Responsive Design */
+/* Responsive */
 @media (max-width: 768px) {
   .login-appbar {
-    height: 70px;
+    height: 64px;
   }
-  
+
   .login-appbar-content {
     padding: 0 16px;
   }
-  
+
   .appbar-logo {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
   }
-  
+
   .appbar-title {
-    font-size: 16px;
+    font-size: 0.9rem;
   }
-  
+
   .appbar-subtitle {
-    font-size: 10px;
+    font-size: 0.58rem;
   }
-  
+
   .system-name {
-    font-size: 12px;
-  }
-  
-  .system-version {
-    font-size: 10px;
+    font-size: 0.75rem;
   }
 }
 
 @media (max-width: 480px) {
   .logo-section {
-    gap: 12px;
+    gap: 10px;
   }
-  
+
   .appbar-title {
-    font-size: 14px;
+    font-size: 0.82rem;
   }
-  
+
   .appbar-subtitle {
-    display: none; /* Hide subtitle on very small screens */
+    display: none;
   }
-  
+
   .system-info {
-    display: none; /* Hide system info on very small screens */
+    display: none;
   }
 }

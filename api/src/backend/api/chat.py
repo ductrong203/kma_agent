@@ -23,8 +23,6 @@ agent.create_graph()
 agent.print_mermaid()
 
 from ..db.mongodb import MongoDB, mongodb
-
-
 from ..models.chat import (
     ConversationCreate,
     ConversationResponse,
@@ -37,6 +35,7 @@ from ..models.responses import BaseResponse
 from ..auth.dependencies import require_auth
 from .rate_limit import check_rate_limit
 from ..services.department_filter import DepartmentFilterService
+from ..services.attachment_rag_service import get_attachment_rag_service
 
 router = APIRouter()
 
@@ -323,7 +322,7 @@ async def query_ai(
     selected_folder = message.department
     
     # Detect query metadata department using existing logic
-    from ...rag.retriever import analyze_query_for_metadata_filter
+    from rag.retriever import analyze_query_for_metadata_filter
     query_metadata = analyze_query_for_metadata_filter(message.content)
     query_metadata_department = query_metadata.get('department') if query_metadata else None
     
@@ -351,12 +350,54 @@ async def query_ai(
     else:
         content = message.content
 
+    # ==================== NEW: Handle Attachments ====================
+    attachment_objects = []
+    augmented_content = content
+    
+    if message.attachments:
+        logger.info(f"Processing {len(message.attachments)} attachments")
+        
+        # Get attachment RAG service
+        attachment_rag_service = get_attachment_rag_service()
+        
+        # Build context from attachments
+        attachment_context = await attachment_rag_service.build_context_from_attachments(
+            query=content,
+            file_ids=message.attachments,
+            max_context_length=3000
+        )
+        
+        # Augment content with attachment context
+        if attachment_context:
+            augmented_content = f"{content}\n\n[DOCUMENT CONTEXT]\n{attachment_context}"
+            logger.info(f"Augmented content with {len(attachment_context)} chars of context")
+        
+        # Prepare attachment objects for DB storage
+        for file_id in message.attachments:
+            try:
+                from ..services.file_service import FileManagementService
+                file_service = FileManagementService(mongodb.db)
+                file_metadata = await file_service.get_file_metadata(file_id)
+                
+                attachment_objects.append({
+                    "file_id": file_id,
+                    "filename": file_metadata["original_filename"],
+                    "size": file_metadata["size"],
+                    "mime_type": file_metadata["mime_type"],
+                    "status": "ready"
+                })
+                logger.info(f"Added attachment: {file_id}")
+            except Exception as e:
+                logger.warning(f"Could not load attachment metadata: {file_id}, error: {str(e)}")
+    # ================================================================
+
     # Create the user message
     new_message = {
         "conversation_id": conv_id,
         "content": content,
         "is_user": message.is_user,
-        "created_at": now
+        "created_at": now,
+        "attachments": attachment_objects  # NEW: Store attachments
     }
 
     await mongodb.db.messages.insert_one(new_message)
@@ -381,12 +422,12 @@ async def query_ai(
             conversation_history.append(AIMessage(content=msg["content"]))
 
     # Use the chat_with_memory method to get a response with context
-    logger.info(f"Processing query with memory: {content}, department: {selected_folder}")
-    updated_history = await agent.chat_with_memory(conversation_history[:-1], content, department=selected_folder)
+    logger.info(f"Processing query with memory: {augmented_content[:100]}..., department: {selected_folder}")
+    updated_history = await agent.chat_with_memory(conversation_history[:-1], augmented_content, department=selected_folder)
     
     # The last message in the updated history is the AI's response
     ai_response = updated_history[-1].content
-    logger.info(f"Agent response: {ai_response}")
+    logger.info(f"Agent response: {ai_response[:100]}...")
 
     now = datetime.utcnow()
 
@@ -395,7 +436,8 @@ async def query_ai(
         "conversation_id": conv_id,
         "content": ai_response,
         "is_user": False,
-        "created_at": now
+        "created_at": now,
+        "attachments": []  # Bot responses don't have attachments
     }
 
     result = await mongodb.db.messages.insert_one(new_ai_message)
@@ -413,10 +455,11 @@ async def query_ai(
         content=created_message["content"],
         is_user=created_message["is_user"],
         created_at=created_message["created_at"],
+        attachments=created_message.get("attachments", [])  # NEW: Include attachments
     )
     
     # Tính toán số token đã sử dụng và cập nhật rate limit
-    estimated_tokens = estimate_token_count(content, ai_response)
+    estimated_tokens = estimate_token_count(augmented_content, ai_response)
     logger.info(f"Estimated token usage: {estimated_tokens}")
     logger.info(f"Updating rate limit for user ID: {user_id}")
     
@@ -527,7 +570,7 @@ async def quick_chat(
     selected_folder = message.department
     
     # Detect query metadata department using existing logic
-    from ...rag.retriever import analyze_query_for_metadata_filter
+    from rag.retriever import analyze_query_for_metadata_filter
     query_metadata = analyze_query_for_metadata_filter(message.content)
     query_metadata_department = query_metadata.get('department') if query_metadata else None
     

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from langchain_core.messages import HumanMessage
-from ..llm import get_llm, LLMConfig  # Sử dụng get_llm() để respect runtime model selection
+from llm import get_llm, LLMConfig  # Sử dụng get_llm() để respect runtime model selection
 from .retriever import create_enhanced_hybrid_retriever, smart_retrieve, get_metadata_config, MetadataEnhancedHybridRetriever
 
 # Set up logging

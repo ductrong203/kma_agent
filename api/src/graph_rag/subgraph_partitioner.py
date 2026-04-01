@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Set, Tuple
 import networkx as nx
 from langchain_core.documents import Document
 import numpy as np
-from ..llm.config import get_llm  # Sử dụng get_llm() để respect runtime model selection
+from llm.config import get_llm  # Sử dụng get_llm() để respect runtime model selection
 
 logger = logging.getLogger(__name__)
 

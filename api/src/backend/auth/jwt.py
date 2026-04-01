@@ -213,3 +213,48 @@ async def validate_refresh_token(refresh_token: str) -> str:
         return user_id
     except JWTError:
         raise credentials_exception
+
+
+def verify_token(token: str) -> Dict[str, Any]:
+    """
+    Xác thực JWT token và trả về thông tin người dùng
+    Hàm đơn giản để extract user info từ token mà không cần query database
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Dict chứa "sub" (user_id) hoặc "user_id"
+        
+    Raises:
+        JWTError: Nếu token không hợp lệ hoặc đã hết hạn
+    """
+    try:
+        # Giải mã token
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+        
+        if user_id is None:
+            logger.warning("❌ Token không chứa field 'sub'")
+            return None
+        
+        # Kiểm tra loại token
+        token_type: str = payload.get("token_type")
+        if token_type != "access":
+            logger.warning(f"❌ Token loại không hợp lệ: {token_type}")
+            return None
+        
+        logger.info(f"✅ Token verified successfully for user: {user_id[:20] if isinstance(user_id, str) else user_id}")
+        
+        # Return dict với "sub" để sử dụng với get_optional_user
+        return {
+            "sub": user_id,
+            "user_id": user_id,
+            "token_type": token_type
+        }
+    except JWTError as e:
+        logger.warning(f"❌ JWT Error: {str(e)}")
+        return None
+    except Exception as e:
+        logger.warning(f"❌ Unexpected error in verify_token: {str(e)}")
+        return None

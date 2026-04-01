@@ -1,9 +1,10 @@
 import logging
 import os
+from pathlib import Path
 
 import typer
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,7 +19,9 @@ from .api import router as api_router
 # from api.chat import router as chat_router
 # from api.user import router as user_router
 
-load_dotenv()
+# Load .env from root directory
+root_env_path = Path(__file__).parent.parent.parent.parent / ".env"
+load_dotenv(root_env_path)
 
 # Configure logging
 logging.basicConfig(
@@ -98,10 +101,35 @@ async def startup_db_client():
         # Sử dụng hàm helper get_db để khởi tạo kết nối
         db = await get_db()
         collections = await db.list_collection_names()
-        logger.info(f"Connected to MongoDB. Collections: {collections}")
+        logger.info(f"✅ Connected to MongoDB. Collections: {collections}")
     except Exception as e:
-        logger.exception(f"MongoDB connection failed: {str(e)}")
+        logger.exception(f"❌ MongoDB connection failed: {str(e)}")
         raise Exception("Failed to connect to MongoDB. Application cannot start.")
+    
+    # Test Milvus Cloud connection - EAGER INIT
+    try:
+        logger.info("🔗 Testing Milvus Cloud connection...")
+        import os
+        from .services.vector_store_service import VectorStoreService
+        
+        milvus_endpoint = os.getenv("MILVUS_CLOUD_ENDPOINT")
+        milvus_collection = os.getenv("MILVUS_COLLECTION_NAME")
+        
+        if milvus_endpoint:
+            logger.info(f"   📍 Endpoint: {milvus_endpoint}")
+            logger.info(f"   📚 Collection: {milvus_collection}")
+            
+            # Initialize connection immediately (eager init)
+            logger.info("   🔐 Establishing connection...")
+            vector_store = VectorStoreService()
+            logger.info("✅ Milvus Cloud connection established successfully!")
+            logger.info(f"   Ready for file embeddings")
+        else:
+            logger.warning("⚠️  MILVUS_CLOUD_ENDPOINT not set. Vector search unavailable")
+            
+    except Exception as e:
+        logger.error(f"❌ Milvus Cloud connection error: {str(e)}")
+        logger.error(f"   Application cannot proceed without Milvus. Please fix the configuration.")
     
     # Warm up GraphRAG cache on startup for instant first query
     try:
@@ -111,6 +139,10 @@ async def startup_db_client():
         logger.info(f"✅ GraphRAG cache ready (retriever type: {type(retriever).__name__})")
     except Exception as e:
         logger.warning(f"⚠️  Failed to warm up GraphRAG cache: {e}")
+    
+    logger.info("=" * 50)
+    logger.info("✅ Backend startup complete")
+    logger.info("=" * 50)
 
 
 
@@ -161,6 +193,53 @@ async def health_check():
             "version": "1.0.0"
         }
     )
+
+@app.get("/health/milvus", response_model=BaseResponse)
+async def milvus_health_check():
+    """Health check endpoint specifically for Milvus Vector Store"""
+    try:
+        import os
+        from pymilvus import connections
+        
+        milvus_endpoint = os.getenv("MILVUS_CLOUD_ENDPOINT")
+        milvus_collection = os.getenv("MILVUS_COLLECTION_NAME", "user_document_embeddings")
+        
+        milvus_status = {
+            "endpoint": milvus_endpoint or "localhost:19530 (Standalone)",
+            "collection": milvus_collection,
+            "connected": False,
+            "entities_count": 0
+        }
+        
+        # Check connection
+        if "default" in connections.list_connections():
+            milvus_status["connected"] = True
+            logger.info("✅ Milvus connection is active")
+            
+            # Try to get collection info
+            try:
+                from pymilvus import Collection
+                collection = Collection(milvus_collection)
+                milvus_status["entities_count"] = collection.num_entities
+                logger.info(f"✅ Milvus collection '{milvus_collection}' has {collection.num_entities} entities")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not get collection info: {str(e)}")
+                
+        else:
+            logger.warning("⚠️  Milvus connection not established yet")
+            
+        return BaseResponse(
+            statusCode=status.HTTP_200_OK,
+            message="Milvus health check" if milvus_status["connected"] else "Milvus not connected",
+            data=milvus_status
+        )
+    except Exception as e:
+        logger.error(f"❌ Milvus health check failed: {str(e)}", exc_info=True)
+        return BaseResponse(
+            statusCode=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"Milvus check failed: {str(e)}",
+            data=None
+        )
 
 @app.get("/test-cors")
 async def test_cors():

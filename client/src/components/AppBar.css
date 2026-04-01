@@ -1,308 +1,218 @@
-/* AppBar Styles - Modern LibreChat Design */
-.app-bar {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  border-bottom: 1px solid #e2e8f0;
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  height: 64px;
-}
+/* ============================================================
+   ACTVN-AGENT — AppBar (TopNavBar)
+   Reference-matching: blur bg, nav tabs, icon actions
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 
-.app-bar-content {
-  max-width: 100%;
+.app-bar {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 50;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 24px;
-  min-height: 64px;
-  width: 100%;
+  height: 64px;
+  background: rgba(248, 249, 251, 0.8);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(0,0,0,0.04);
 }
 
+html.dark .app-bar {
+  background: rgba(15, 17, 21, 0.8);
+  border-bottom-color: rgba(255,255,255,0.04);
+}
+
+.app-bar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Logo */
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
+  gap: 8px;
 }
 
-.logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  border: 2px solid #dc2626;
-  background: white;
-  padding: 2px;
+.logo-section .logo {
+  width: 32px;
+  height: 32px;
   object-fit: contain;
+  border: none;
+  padding: 0;
+  border-radius: 0;
 }
 
 .title-section {
-  color: #1a202c;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .main-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-family: 'Manrope', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #bb0013;
   margin: 0;
-  color: #dc2626;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 
-.sub-title {
-  font-size: 12px;
-  margin: 2px 0 0 0;
-  opacity: 0.6;
-  font-weight: 400;
-  color: #718096;
-}
+html.dark .main-title { color: #ed1c24; }
 
-.user-section {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex: 1;
-  justify-content: flex-end;
-}
+.sub-title { display: none; }
 
+/* Nav Tabs */
 .mode-switcher {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 24px;
+  margin-left: 32px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.3px;
 }
 
 .mode-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #4a5568;
-  background-color: #edf2f7;
-  border: 1px solid #cbd5e0;
+  gap: 0;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.2s;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
 }
 
-.mode-btn:hover {
-  background-color: #e2e8f0;
-  border-color: #a0aec0;
-}
+.mode-btn:hover { color: #bb0013; }
 
 .mode-btn.active {
-  background-color: #dc2626;
-  color: white;
-  border-color: #dc2626;
+  color: #bb0013;
+  border-bottom-color: #bb0013;
+  background: none;
+  box-shadow: none;
+}
+
+.mode-btn svg {
+  display: none; /* hide icons, text-only nav like reference */
+}
+
+/* Right actions */
+.user-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .app-bar-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: 8px;
-  margin-right: 8px;
+  gap: 2px;
+  margin: 0;
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 }
 
-.welcome-text {
-  color: #4a5568;
-  font-weight: 500;
-  font-size: 13px;
-}
+.welcome-text { display: none; }
 
-.admin-link {
+.admin-link,
+.logout-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: #edf2f7;
-  color: #4a5568;
-  border: 1px solid #cbd5e0;
-  padding: 7px 14px;
-  border-radius: 6px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  font-size: 0;
   text-decoration: none;
 }
 
-.admin-link:hover {
-  background: #e2e8f0;
-  border-color: #a0aec0;
-}
+.admin-link svg,
+.logout-btn svg,
+.admin-link .react-icon,
+.logout-btn .react-icon { display: block; }
 
-.guest-text {
-  color: #4a5568;
-  font-weight: 500;
-  font-size: 13px;
-}
-
-.logout-btn {
-  background: #fed7d7;
-  color: #c53030;
-  border: 1px solid #fc8181;
-  padding: 7px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
+.admin-link:hover,
 .logout-btn:hover {
-  background: #f5a5a5;
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-1px);
+  background: rgba(0,0,0,0.04);
+  color: #bb0013;
 }
 
-/* Loại bỏ center-section nếu không sử dụng */
-.center-section {
-  display: none; /* Ẩn nếu không cần */
-}
-
-.new-chat-btn {
-  display: none; /* Ẩn nếu không sử dụng */
-}
-
-/* Dark Mode Support */
-html.dark .app-bar {
-  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-  border-bottom-color: #374151;
-}
-
-html.dark .title-section {
-  color: #9ca3af;
-}
-
-html.dark .main-title {
-  color: #ef4444;
-}
-
-html.dark .sub-title {
-  color: #6b7280;
-}
-
-html.dark .mode-btn {
-  background-color: #374151;
-  color: #e5e7eb;
-  border-color: #4b5563;
-}
-
-html.dark .mode-btn:hover {
-  background-color: #4b5563;
-  border-color: #6b7280;
-}
-
-html.dark .mode-btn.active {
-  background-color: #dc2626;
-  color: white;
-  border-color: #dc2626;
-}
-
-html.dark .welcome-text {
-  color: #d1d5db;
-}
-
-html.dark .admin-link {
-  background: #374151;
-  color: #e5e7eb;
-  border-color: #4b5563;
-}
-
-html.dark .admin-link:hover {
-  background: #4b5563;
-  border-color: #6b7280;
-}
-
-html.dark .logout-btn {
-  background: rgba(220, 38, 38, 0.2);
-  color: #ef4444;
-  border-color: #dc2626;
-}
-
+html.dark .admin-link:hover,
 html.dark .logout-btn:hover {
-  background: rgba(220, 38, 38, 0.3);
-  border-color: #ef4444;
+  background: rgba(255,255,255,0.06);
+  color: #ed1c24;
 }
 
-/* Responsive Design */
+.guest-text { display: none; }
+
+/* Model Info Badge */
+.model-info-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(187, 0, 19, 0.06);
+  border: 1px solid rgba(187, 0, 19, 0.12);
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #bb0013;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.model-info-badge .model-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: model-pulse 2s ease-in-out infinite;
+}
+
+@keyframes model-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+html.dark .model-info-badge {
+  background: rgba(237, 28, 36, 0.08);
+  border-color: rgba(237, 28, 36, 0.15);
+  color: #ed1c24;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .app-bar-content {
-    min-height: 60px; /* Giảm chiều cao */
-    padding: 0.4rem 0; /* Giảm padding */
-  }
-
-  .logo-section {
-    padding-left: 0; /* Loại bỏ padding */
-  }
-
-  .user-section {
-    padding-right: 0; /* Loại bỏ padding */
-  }
-
-  .logo {
-    width: 40px; /* Giảm kích thước logo */
-    height: 40px;
-  }
-
-  .main-title {
-    font-size: 1.25rem;
-  }
-
-  .sub-title {
-    font-size: 0.75rem;
-  }
-
-  .welcome-text {
-    font-size: 0.8rem;
-  }
+  .app-bar { padding: 0 12px; height: 56px; }
+  .mode-switcher { gap: 16px; margin-left: 16px; }
+  .mode-btn { font-size: 0.8rem; }
+  .model-info-badge { display: none; }
 }
 
 @media (max-width: 480px) {
-  .app-bar-content {
-    min-height: 50px; /* Giảm chiều cao */
-    padding: 0.3rem 0; /* Giảm padding */
-  }
-
-  .logo-section {
-    gap: 0.3rem; /* Giảm gap */
-    padding-left: 0; /* Loại bỏ padding */
-  }
-
-  .user-section {
-    padding-right: 0; /* Loại bỏ padding */
-  }
-
-  .logo {
-    width: 35px; /* Giảm kích thước logo */
-    height: 35px;
-    border: 2px solid white; /* Giảm viền */
-  }
-
-  .logo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .main-title {
-    font-size: 1rem;
-  }
-
-  .sub-title {
-    display: none;
-  }
-
-  .welcome-text {
-    display: none;
-  }
-
-  .user-info {
-    gap: 0.5rem;
-  }
+  .mode-switcher { display: none; }
+  .main-title { font-size: 1rem; }
 }

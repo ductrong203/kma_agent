@@ -1,17 +1,22 @@
-/* Chat Header - LibreChat Style */
-
+/* Chat Header - Modern Premium Design */
 .chat-header {
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  border-bottom: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: var(--surface-bright);
+  border-bottom: 1px solid var(--outline-variant);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-body);
+}
+
+html.dark .chat-header {
+  background: var(--surface-bright);
+  border-bottom: 1px solid var(--outline-variant);
 }
 
 .header-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  gap: 24px;
+  padding: 18px 28px;
+  gap: 28px;
 }
 
 /* Left Section */
@@ -21,18 +26,21 @@
 
 .chat-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  background: linear-gradient(135deg, #1f2937, #111827);
+  font-family: var(--font-display);
+  background: linear-gradient(135deg, var(--kma-primary), var(--kma-primary-dark));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  letter-spacing: -0.02em;
 }
 
 .header-subtitle {
   margin: 4px 0 0 0;
-  font-size: 13px;
-  color: #6b7280;
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  font-weight: 500;
 }
 
 /* Middle Section */
@@ -47,13 +55,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  background: rgba(220, 38, 38, 0.1);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  border-radius: 20px;
-  font-size: 12px;
+  padding: 8px 14px;
+  background: var(--kma-primary-50);
+  border: 1px solid var(--kma-primary-20);
+  border-radius: var(--radius-xl);
+  font-size: 11px;
   font-weight: 600;
-  color: #b91c1c;
+  color: var(--kma-primary);
+  letter-spacing: -0.01em;
 }
 
 .department-badge {
@@ -82,24 +91,35 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  padding: 8px 14px;
+  background: var(--surface-dim);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  font-sizes: 14px;
-  font-weight: 500;
-  color: #374151;
-  transition: all 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  transition: all 0.2s ease;
 }
 
 .dropdown-toggle:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--outline-variant);
+  border-color: var(--kma-primary-20);
 }
 
 .dropdown-toggle:active {
-  background: #f3f4f6;
+  background: var(--outline-variant);
+}
+
+html.dark .dropdown-toggle {
+  background: var(--surface-dim);
+  border-color: var(--outline-variant);
+  color: var(--on-surface);
+}
+
+html.dark .dropdown-toggle:hover {
+  border-color: var(--kma-primary-20);
 }
 
 .model-text {
@@ -111,43 +131,54 @@
   position: absolute;
   top: 100%;
   right: 0;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  margin-top: 4px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  background: var(--surface-bright);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  margin-top: 6px;
+  box-shadow: var(--shadow-lg);
   z-index: 100;
   min-width: 200px;
   overflow: hidden;
+  font-family: var(--font-body);
+}
+
+html.dark .dropdown-menu {
+  background: var(--surface-bright);
+  border-color: var(--outline-variant);
 }
 
 .dropdown-item {
   padding: 10px 16px;
-  color: #374151;
+  color: var(--on-surface);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.15s ease, color 0.15s ease;
   font-size: 13px;
+  font-weight: 500;
 }
 
 .dropdown-item:hover {
-  background: #f3f4f6;
+  background: var(--surface-dim);
+  color: var(--kma-primary);
 }
 
 .dropdown-item:first-child {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--outline-variant);
 }
 
 /* Header Button */
 .header-btn {
-  background: white;
-  border: 1px solid #d1d5db;
-  color: #6b7280;
+  background: var(--surface-dim);
+  border: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant);
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
   cursor: pointer;
   transition: all 0.2s;
 }

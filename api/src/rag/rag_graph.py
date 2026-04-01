@@ -257,7 +257,7 @@ from langsmith import Client
 from pydantic import Field, BaseModel
 
 # Sử dụng get_llm để respect runtime model selection (Ollama/Gemini)
-from ..llm import LLMConfig, get_llm
+from llm import LLMConfig, get_llm
 from .retriever import create_hybrid_retriever
 from .semantic_analyzer import analyze_query_semantic_filter
 
@@ -344,7 +344,7 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     Returns:
         Dictionary with answer, sources and department decision
     """
-    from ..graph_rag import DepartmentGraphManager
+    from graph_rag import DepartmentGraphManager
     
     # Create components if not provided
     if retriever is None:
@@ -586,7 +586,7 @@ def get_retriever():
     
     import os
     from pathlib import Path
-    from ..graph_rag import DepartmentGraphManager
+    from graph_rag import DepartmentGraphManager
     
     # Define paths
     current_dir = Path(__file__).parent.absolute()
@@ -760,7 +760,7 @@ class KMAChatAgent:
         logger.info(f"Retriever type: {type(self.retriever).__name__}")
         
         # DepartmentGraphManager uses smart query routing
-        from ..graph_rag import DepartmentGraphManager
+        from graph_rag import DepartmentGraphManager
         
         if isinstance(self.retriever, DepartmentGraphManager):
             logger.info("🏢 Using Department-based retrieval (smart routing)")

@@ -1,27 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
-import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
-import AppBar from "./components/AppBar";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import ChatMessages from "./components/ChatMessages";
 import ChatInput from "./components/ChatInput";
 import WelcomeScreen from "./components/WelcomeScreen";
 import Login from "./components/Login";
-import FileChat from "./components/FileChat";
+import LandingPage from "./components/LandingPage";
 import UsageStats from "./components/UsageStats";
-import DarkModeToggle from "./components/DarkModeToggle";
+import ModelSelector from "./components/ModelSelector";
+
 import useDarkMode from "./hooks/useDarkMode";
 import chatService from "./services/chatService";
 import authService from "./services/authService";
 import { v4 as uuidv4 } from "uuid";
-import { FiMenu, FiX } from "react-icons/fi";
+import { FiMenu, FiX, FiMessageSquare, FiExternalLink } from "react-icons/fi";
 import ConversationList from "./components/ConversationList";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import "./components/LoadingApp.css";
 import "./components/StatsPanel.css";
+import "./App.css";
 import constants from "./utils/constants";
 
 const { API_BASE_URL, WEBUI_URL } = constants;
@@ -33,10 +29,10 @@ function ChatApp() {
   const [error, setError] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [viewMode, setViewMode] = useState("chat"); // 'chat' or 'file-chat'
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState("all"); // Default to 'all'
   const [folders, setFolders] = useState([]);
+  const [authView, setAuthView] = useState("landing"); // 'landing', 'login', 'register'
   const messagesEndRef = useRef(null);
 
   // Initialize dark mode
@@ -255,11 +251,6 @@ function ChatApp() {
     }
   };
 
-  // Handle switch between chat modes
-  const handleSwitchMode = (mode) => {
-    setViewMode(mode);
-    // Reset any other state if needed when switching modes
-  };
   const handleSummaryClick = async () => {
     try {
       const res = await fetch(
@@ -285,10 +276,14 @@ function ChatApp() {
     setIsSidebarOpen(false);
   };
 
-  const handleSendMessage = async (messageText, department = null) => {
-    if (!messageText.trim()) {
-      console.error("Cannot send message: Missing message text");
-      setError("Không thể gửi tin nhắn: Nội dung trống.");
+  const handleSendMessage = async (
+    messageText,
+    department = null,
+    attachmentFileIds = [],
+  ) => {
+    if (!messageText.trim() && attachmentFileIds.length === 0) {
+      console.error("Cannot send message: Missing message text or attachments");
+      setError("Không thể gửi tin nhắn: Nội dung hoặc tài liệu trống.");
       return;
     }
 
@@ -298,6 +293,7 @@ function ChatApp() {
       sender: "user",
       timestamp: new Date().toISOString(),
       department: department,
+      attachments: attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -320,7 +316,7 @@ function ChatApp() {
         }
         const newConversation = response.conversation;
         currentConversationId = newConversation.id;
-        setConversationId(currentConversationId); // Gán ngay giá trị mới
+        setConversationId(currentConversationId);
         setConversations((prev) => [newConversation, ...prev]);
         console.log("New conversation created, ID:", currentConversationId);
       } else {
@@ -335,7 +331,8 @@ function ChatApp() {
       const response = await chatService.sendMessage(
         currentConversationId,
         messageText,
-        selectedFolder === "all" ? null : selectedFolder, // Send null for 'all', otherwise send the selected folder
+        selectedFolder === "all" ? null : selectedFolder,
+        attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
       );
       if (response.success) {
         const botMessage = {
@@ -394,9 +391,6 @@ function ChatApp() {
           };
           setMessages((prev) => [...prev, rateLimitMessage]);
 
-          // Không hiển thị bảng thống kê sử dụng
-          // window.dispatchEvent(new Event('showRateLimitStats'));
-
           setError(responseMsg || errorMsg);
         } else {
           throw new Error(errorMsg || responseMsg || "Failed to send message");
@@ -414,10 +408,7 @@ function ChatApp() {
           error.response.data?.message ||
           "Bạn đã vượt quá giới hạn gửi tin nhắn. Vui lòng thử lại sau.";
         isRateLimit = true;
-        // Không hiển thị bảng thống kê sử dụng
-        // window.dispatchEvent(new Event('showRateLimitStats'));
       } else if (error.response && error.response.status === 403) {
-        // Lỗi phân quyền hoặc giới hạn phạm vi truy vấn
         const detailData =
           error.response.data?.detail || error.response.data?.message;
         errorText =
@@ -448,15 +439,12 @@ function ChatApp() {
       ) {
         errorText = error.message;
         isRateLimit = true;
-        // Không hiển thị bảng thống kê sử dụng
-        // window.dispatchEvent(new Event('showRateLimitStats'));
       } else if (error.message.includes("Network Error")) {
         errorText =
           "Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.";
       } else if (error.message.includes("timeout")) {
         errorText = "Yêu cầu bị hết thời gian chờ. Vui lòng thử lại sau.";
       } else {
-        // Sử dụng thông báo lỗi chi tiết từ error.message hoặc response
         const detailData =
           error.response?.data?.detail || error.response?.data?.message;
         errorText =
@@ -543,144 +531,127 @@ function ChatApp() {
     }
   };
 
-  const getWelcomeMessage = () => {
-    if (user) {
-      return `Xin chào ${
-        user.name || "người dùng"
-      }! Tôi là trợ lý AI của Học viện Kỹ thuật Mật mã. Tôi có thể giúp bạn về các thông tin học tập, quy định nhà trường, và nhiều câu hỏi khác. Hãy hỏi tôi bất cứ điều gì bạn muốn biết!`;
-    }
-    return "Xin chào! Tôi là trợ lý AI của Học viện Kỹ thuật Mật mã.";
-  };
-
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    if (authView === "landing") {
+      return (
+        <LandingPage
+          onNavigateLogin={() => setAuthView("login")}
+          onNavigateRegister={() => setAuthView("register")}
+        />
+      );
+    }
+    return (
+      <Login
+        onLogin={handleLogin}
+        initialMode={authView === "register" ? "register" : "login"}
+        onBackToLanding={() => setAuthView("landing")}
+      />
+    );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
-      {/* AppBar luôn ở trên cùng */}
-      <AppBar
-        user={user}
-        onLogout={handleLogout}
-        viewMode={viewMode}
-        onSwitchMode={handleSwitchMode}
-        handleSummaryClick={handleSummaryClick}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={toggleDarkMode}
-      />
+    <div className="chat-app-layout">
+      {/* Sidebar */}
+      <aside className={`chat-app-sidebar ${isSidebarOpen ? "open" : ""}`}>
+        <ConversationList
+          user={user}
+          selectedConversationId={conversationId}
+          onConversationSelect={handleConversationSelect}
+          onNewConversation={handleNewConversation}
+          conversations={conversations}
+          setConversations={setConversations}
+          onLogout={handleLogout}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={toggleDarkMode}
+        />
+      </aside>
 
-      {viewMode === "file-chat" ? (
-        <div className="flex-1 p-4 mt-2">
-          <FileChat onBack={() => setViewMode("chat")} />
-        </div>
-      ) : (
-        <div className="flex flex-1 min-h-0">
-          {/* Sidebar */}
-          <div
-            className={`
-              ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
-              lg:translate-x-0 lg:static lg:inset-0
-              fixed inset-y-0 left-0 z-50 w-80
-              transition duration-300 ease-in-out transform
-              bg-white border-r border-gray-200
-            `}
+      {/* Overlay for mobile */}
+      {isSidebarOpen && (
+        <div
+          className="chat-app-overlay"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Main Content */}
+      <div className="chat-app-main">
+        {/* Top Bar — minimal */}
+        <header className="chat-app-topbar">
+          <button
+            className="topbar-menu-btn"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Toggle sidebar"
           >
-            <ConversationList
-              user={user}
-              selectedConversationId={conversationId}
-              onConversationSelect={handleConversationSelect}
-              onNewConversation={handleNewConversation}
-              conversations={conversations}
-              setConversations={setConversations}
-            />
+            {isSidebarOpen ? <FiX size={20} /> : <FiMenu size={20} />}
+          </button>
+
+          <div className="topbar-center">
+            <ModelSelector />
           </div>
-          {/* Main Chat Area */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Mobile header */}
-            <div className="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200">
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
-              >
-                <FiMenu className="w-6 h-6" />
+
+          <div className="topbar-actions">
+            {/* Mode switcher - only chat mode */}
+            <nav className="topbar-nav">
+              <button className={`topbar-nav-btn active`} title="Chat">
+                <FiMessageSquare size={16} />
+                <span>Chat</span>
               </button>
-              <h1 className="text-xl font-semibold text-gray-900">
-                Chatbot KMA
-              </h1>
-              <div className="w-10"></div>
-            </div>
-            {/* Chat Content */}
-            <main className="flex-1 overflow-hidden pt-2">
-              {error && (
-                <div
-                  className="error-message"
-                  style={{ color: "red", padding: "10px", textAlign: "center" }}
+              <button
+                className="topbar-nav-btn"
+                onClick={handleSummaryClick}
+                title="Tóm tắt"
+              >
+                <FiExternalLink size={16} />
+                <span>Tóm tắt</span>
+              </button>
+            </nav>
+          </div>
+        </header>
+
+        {/* Chat Content */}
+        <main className="chat-app-content">
+          {error && <div className="chat-app-error">{error}</div>}
+
+          {showStatsPanel && (
+            <div className="stats-panel-container">
+              <div className="stats-panel-header">
+                <h3>Thống kê sử dụng</h3>
+                <button
+                  className="close-button"
+                  onClick={() => setShowStatsPanel(false)}
                 >
-                  {error}
-                </div>
-              )}
-
-              {/* Rate Limit Stats Panel */}
-              {showStatsPanel && (
-                <div className="stats-panel-container">
-                  <div className="stats-panel-header">
-                    <h3>Thống kê sử dụng</h3>
-                    <button
-                      className="close-button"
-                      onClick={() => setShowStatsPanel(false)}
-                    >
-                      <FiX />
-                    </button>
-                  </div>
-                  <UsageStats />
-                </div>
-              )}
-
-              <div
-                className="chat-area flex-1 overflow-y-auto"
-                style={{
-                  maxHeight: "calc(100vh - 120px)", // Điều chỉnh dựa trên chiều cao AppBar (60px) + header di động (60px)
-                  paddingBottom: "80px", // Đảm bảo không bị che bởi ChatInput (chiều cao ~60px + padding)
-                  paddingTop: "10px", // Thêm padding-top để tránh bị AppBar che khi tạo cuộc trò chuyện mới
-                }}
-              >
-                {messages.length === 0 ? (
-                  <WelcomeScreen
-                    user={user}
-                    onSendMessage={handleSendMessage}
-                    welcomeMessage={getWelcomeMessage()}
-                  />
-                ) : (
-                  <ChatMessages messages={messages} isLoading={isLoading} />
-                )}
-                <div ref={messagesEndRef} />
+                  <FiX />
+                </button>
               </div>
-            </main>
-            {/* ChatInput cố định ở dưới cùng */}
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              disabled={isLoading || !user} // Chỉ disabled khi loading hoặc chưa đăng nhập
-              selectedFolder={selectedFolder}
-              onFolderChange={setSelectedFolder}
-              folders={folders}
-            />
-          </div>
-          {/* Overlay for mobile sidebar */}
-          {isSidebarOpen && (
-            <div
-              className="lg:hidden fixed inset-0 z-40 bg-black bg-opacity-50"
-              onClick={() => setIsSidebarOpen(false)}
-            >
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className="absolute top-4 right-4 p-2 rounded-lg text-white hover:bg-white hover:bg-opacity-20"
-              >
-                <FiX className="w-6 h-6" />
-              </button>
+              <UsageStats />
             </div>
           )}
-        </div>
-      )}
+
+          <div className="chat-area">
+            {messages.length === 0 ? (
+              <WelcomeScreen user={user} onSendMessage={handleSendMessage} />
+            ) : (
+              <ChatMessages
+                messages={messages}
+                isLoading={isLoading}
+                messagesEndRef={messagesEndRef}
+              />
+            )}
+          </div>
+        </main>
+
+        {/* ChatInput */}
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          disabled={isLoading || !user}
+          selectedFolder={selectedFolder}
+          onFolderChange={setSelectedFolder}
+          folders={folders}
+          conversationId={conversationId}
+          onNeedLogin={() => setAuthView("login")}
+        />
+      </div>
     </div>
   );
 }

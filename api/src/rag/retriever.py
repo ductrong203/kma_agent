@@ -14,7 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
 from pydantic import Field, BaseModel
-from ..llm.config import get_llm  # Import get_llm thay vì get_gemini_llm
+from llm.config import get_llm  # Import get_llm thay vì get_gemini_llm
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -1314,77 +1314,118 @@ def extract_table_data(doc) -> str:
 
 
 def extract_text_from_file(file_path: str, file_type: str) -> str:
-    """Extract text from uploaded file based on file type with enhanced processing"""
-    try:
-        extracted_text = ""
+    """Extract text from uploaded file - raises exceptions instead of returning error strings"""
+    
+    logger.info(f"🔍 Attempting to extract text from {file_path} (type: {file_type})")
+    
+    # Try docling first - handles most formats well
+    if is_docling_available():
+        try:
+            logger.info("📄 Using Docling for extraction...")
+            extracted_text = extract_text_with_docling(file_path)
+            
+            if extracted_text and extracted_text.strip():
+                cleaned_text = clean_extracted_text(extracted_text)
+                if cleaned_text:
+                    logger.info(f"✅ Docling extraction successful: {len(cleaned_text)} characters")
+                    return cleaned_text
+                else:
+                    logger.warning("⚠️ Docling returned content but it was empty after cleaning")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Docling extraction failed: {str(e)}, trying fallback...")
+    
+    # Fallback methods for specific formats
+    extracted_text = ""
+    
+    if file_type == "text/plain" or file_path.endswith('.txt'):
+        logger.info("📝 Extracting .txt file...")
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            extracted_text = f.read()
+    
+    elif file_type == "application/pdf" or file_path.endswith('.pdf'):
+        logger.info("📕 Extracting .pdf file...")
+        if not PDF_AVAILABLE:
+            raise ImportError("PDF processing requires PyPDF2. Install with: pip install PyPDF2")
         
-        if file_type == "text/plain" or file_path.endswith('.txt'):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                extracted_text = f.read()
+        text_parts = []
+        with open(file_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            
+            for page_num, page in enumerate(pdf_reader.pages):
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    text_parts.append(page_text.strip())
+                    text_parts.append("\n")
         
-        elif file_type == "application/pdf" or file_path.endswith('.pdf'):
-            # Enhanced PDF processing - continuous text without page breaks
-            try:
-                import PyPDF2
-                text_parts = []
-                
-                with open(file_path, 'rb') as file:
-                    pdf_reader = PyPDF2.PdfReader(file)
-                    
-                    for page_num, page in enumerate(pdf_reader.pages):
-                        page_text = page.extract_text()
-                        
-                        if page_text.strip():
-                            # Add content directly without page markers for continuous flow
-                            text_parts.append(page_text.strip())
-                            # Add a space or newline to separate content from different pages
-                            text_parts.append("\n")
-                
-                extracted_text = "".join(text_parts)
-                
-            except ImportError:
-                return "PDF processing not available. Please install PyPDF2."
-            except Exception as e:
-                return f"Error processing PDF: {str(e)}"
+        extracted_text = "".join(text_parts)
+    
+    elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or file_path.endswith('.docx'):
+        logger.info("📘 Extracting .docx file...")
+        if not DOCX_AVAILABLE:
+            raise ImportError("DOCX processing requires python-docx. Install with: pip install python-docx")
         
-        elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or file_path.endswith('.docx'):
-            # Enhanced DOCX processing
-            try:
-                import docx
+        doc = docx.Document(file_path)
+        text_parts = []
+        
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text_parts.append(paragraph.text)
+                text_parts.append("\n")
+        
+        table_text = extract_table_data(doc)
+        if table_text:
+            text_parts.append(table_text)
+        
+        extracted_text = "".join(text_parts)
+    
+    elif file_type == "application/msword" or file_path.endswith('.doc'):
+        logger.info("📗 Extracting legacy .doc file...")
+        # Try python-docx first (some .doc files can be read as docx format)
+        try:
+            if DOCX_AVAILABLE:
                 doc = docx.Document(file_path)
                 text_parts = []
-                
-                # Extract paragraphs
                 for paragraph in doc.paragraphs:
                     if paragraph.text.strip():
                         text_parts.append(paragraph.text)
                         text_parts.append("\n")
-                
-                # Extract table data
-                table_text = extract_table_data(doc)
-                if table_text:
-                    text_parts.append(table_text)
-                
                 extracted_text = "".join(text_parts)
-                
-            except ImportError:
-                return "DOCX processing not available. Please install python-docx."
-            except Exception as e:
-                return f"Error processing DOCX: {str(e)}"
-        
-        else:
-            return "Unsupported file type. Please upload .txt, .pdf, or .docx files."
-        
-        # Clean and normalize the extracted text
-        cleaned_text = clean_extracted_text(extracted_text)
-        
-        if not cleaned_text:
-            return "No readable text content found in the file."
-        
-        return cleaned_text
+            else:
+                raise ValueError("No handler for .doc files available")
+        except Exception as doc_error:
+            error_msg = str(doc_error)
+            logger.warning(f"python-docx failed for .doc: {error_msg}")
+            
+            # Check if this is actually an XML file (e.g., from office archives)
+            if "is not a Word file" in error_msg or "xml" in error_msg.lower() or "openxml" in error_msg.lower():
+                logger.error(f"❌ File appears to be XML or other format, not a valid .doc file: {error_msg}")
+                raise ValueError(
+                    f"❌ File format error: This file is not a valid .doc file.\n"
+                    f"Content type: {file_type}\n"
+                    f"Error: {error_msg}\n\n"
+                    f"💡 Supported formats: .pdf, .docx, .doc, .txt, .md\n"
+                    f"📝 Note: .doc files should be binary Word documents. "
+                    f"If you have a .zip or .xml file, please upload the correct file format."
+                )
+            
+            # For other errors, provide generic message
+            raise ValueError(f"Cannot extract .doc file: {error_msg}")
     
-    except Exception as e:
-        return f"Error extracting text from file: {str(e)}"
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}. Supported formats: .txt, .pdf, .docx, .doc")
+    
+    # Clean and validate extracted text
+    if not extracted_text:
+        raise ValueError("File extraction produced no content - file may be empty or corrupted")
+    
+    cleaned_text = clean_extracted_text(extracted_text)
+    
+    if not cleaned_text or len(cleaned_text.strip()) == 0:
+        raise ValueError("After processing, no readable text content found in the file")
+    
+    logger.info(f"✅ Text extraction successful: {len(cleaned_text)} characters extracted")
+    return cleaned_text
 
 
 def create_in_memory_retriever(file_content: str, chunk_size: int = 400, chunk_overlap: int = 200, k: int = 15) -> HybridRetriever:

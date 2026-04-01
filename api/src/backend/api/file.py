@@ -19,8 +19,8 @@ from pydantic import BaseModel, Field
 # Add the parent directory to sys.path to import our agent
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from ...rag.retriever import extract_text_from_file, create_in_memory_retriever
-from ...rag.simple_chat_agent import SimpleChatAgent
+from rag.retriever import extract_text_from_file, create_in_memory_retriever
+from rag.simple_chat_agent import SimpleChatAgent
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

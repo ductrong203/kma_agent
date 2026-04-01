@@ -19,6 +19,45 @@ services:
       retries: 5
     restart: unless-stopped
 
+  mongodb:
+    image: mongo:7
+    container_name: lma_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password123}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_configdb:/data/configdb
+    networks:
+      - lma_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:latest
+    container_name: lma_milvus
+    environment:
+      COMMON_STORAGETYPE: local
+    ports:
+      - "19530:19530" # gRPC port
+      - "9091:9091" # HTTP port
+    volumes:
+      - milvus_data:/var/lib/milvus
+    networks:
+      - lma_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build:
       context: ./api
@@ -27,8 +66,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-lma_user}:${DB_PASSWORD:-pass123}@postgres:5432/${DB_NAME:-lma_chatbot}
+      MONGODB_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-password123}@mongodb:27017/lma_agent?authSource=admin
+      MILVUS_HOST: milvus
+      MILVUS_PORT: 19530
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       PYTHONUNBUFFERED: 1
@@ -58,6 +104,9 @@ services:
 
 volumes:
   postgres_data:
+  mongodb_data:
+  mongodb_configdb:
+  milvus_data:
 
 networks:
   lma_network:

@@ -21,8 +21,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from ..auth.jwt import get_current_user
 from ..models.user import UserResponse
-from ...rag.retriever import extract_text_from_file
-from ...rag.docling_extractor import extract_text_with_docling, is_docling_available
+from rag.retriever import extract_text_from_file
+from rag.docling_extractor import extract_text_with_docling, is_docling_available
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

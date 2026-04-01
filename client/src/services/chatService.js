@@ -1,5 +1,5 @@
-import constants from '../utils/constants';
-import httpClient from '../utils/httpClient';
+import constants from "../utils/constants";
+import httpClient from "../utils/httpClient";
 
 const { API_ENDPOINTS } = constants;
 
@@ -8,25 +8,25 @@ const chatService = {
   queryDepartment: async (query, department) => {
     try {
       // Get current user info for context
-      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-      
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+
       const headers = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
-      
+
       // Add student_code to header if available
       if (userInfo.student_code) {
-        headers['student_code'] = userInfo.student_code;
+        headers["student_code"] = userInfo.student_code;
       }
-      
+
       const response = await httpClient.post(
         `${API_ENDPOINTS.DEPARTMENT_QUERY}?department=${encodeURIComponent(department)}`,
         {
-          content: query
+          content: query,
         },
-        { headers }
+        { headers },
       );
-      
+
       if (response.statusCode === 200 && response.data) {
         return {
           success: true,
@@ -36,16 +36,16 @@ const chatService = {
             isUser: false, // This is a bot response
             createdAt: response.data.created_at,
           },
-          department: department
+          department: department,
         };
       } else {
-        throw new Error(response.message || 'Failed to query department');
+        throw new Error(response.message || "Failed to query department");
       }
     } catch (error) {
-      console.error('Error in department query:', error);
+      console.error("Error in department query:", error);
       return {
         success: false,
-        error: error.message || 'Failed to query department'
+        error: error.message || "Failed to query department",
       };
     }
   },
@@ -53,119 +53,126 @@ const chatService = {
   // Upload file for chat
   uploadFile: async (formData) => {
     try {
-      const response = await httpClient.upload(API_ENDPOINTS.UPLOAD_FILE, formData);
-      
+      const response = await httpClient.upload(
+        API_ENDPOINTS.UPLOAD_FILE,
+        formData,
+      );
+
       return {
         success: true,
-        fileInfo: response.fileInfo
+        fileInfo: response.fileInfo,
       };
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error("Error uploading file:", error);
       return {
         success: false,
-        error: error.message || 'Failed to upload file'
+        error: error.message || "Failed to upload file",
       };
     }
   },
-  
+
   // Query uploaded file
   queryFile: async (fileId, query) => {
     try {
       const response = await httpClient.post(API_ENDPOINTS.QUERY_FILE, {
         file_id: fileId,
-        query: query
+        query: query,
       });
-      
+
       return {
         success: true,
         answer: response.answer,
         sources: response.sources,
         file: response.file,
-        timestamp: response.timestamp
+        timestamp: response.timestamp,
       };
     } catch (error) {
-      console.error('Error querying file:', error);
+      console.error("Error querying file:", error);
       return {
         success: false,
-        error: error.message || 'Failed to query file'
+        error: error.message || "Failed to query file",
       };
     }
   },
-  
+
   // Query uploaded file with multiple questions
   multiQueryFile: async (fileId, queries) => {
     try {
       const response = await httpClient.post(API_ENDPOINTS.MULTI_QUERY_FILE, {
         file_id: fileId,
-        queries: queries
+        queries: queries,
       });
-      
+
       return {
         success: true,
         results: response.results,
         file: response.file,
-        timestamp: response.timestamp
+        timestamp: response.timestamp,
       };
     } catch (error) {
-      console.error('Error multi-querying file:', error);
+      console.error("Error multi-querying file:", error);
       return {
         success: false,
-        error: error.message || 'Failed to process multiple queries'
+        error: error.message || "Failed to process multiple queries",
       };
     }
   },
-  
+
   // Get information about an uploaded file
   getFileInfo: async (fileId) => {
     try {
-      const response = await httpClient.get(`${API_ENDPOINTS.FILE_INFO}/${fileId}`);
-      
+      const response = await httpClient.get(
+        `${API_ENDPOINTS.FILE_INFO}/${fileId}`,
+      );
+
       return {
         success: true,
-        fileInfo: response.fileInfo
+        fileInfo: response.fileInfo,
       };
     } catch (error) {
-      console.error('Error getting file info:', error);
+      console.error("Error getting file info:", error);
       return {
         success: false,
-        error: error.message || 'Failed to get file information'
+        error: error.message || "Failed to get file information",
       };
     }
   },
-  
+
   // List all uploaded files
   listFiles: async () => {
     try {
       const response = await httpClient.get(API_ENDPOINTS.LIST_FILES);
-      
+
       return {
         success: true,
         files: response.files,
-        count: response.count
+        count: response.count,
       };
     } catch (error) {
-      console.error('Error listing files:', error);
+      console.error("Error listing files:", error);
       return {
         success: false,
-        error: error.message || 'Failed to list files'
+        error: error.message || "Failed to list files",
       };
     }
   },
-  
+
   // Delete an uploaded file
   deleteFile: async (fileId) => {
     try {
-      const response = await httpClient.delete(`${API_ENDPOINTS.DELETE_FILE}/${fileId}`);
-      
+      const response = await httpClient.delete(
+        `${API_ENDPOINTS.DELETE_FILE}/${fileId}`,
+      );
+
       return {
         success: true,
-        message: response.message
+        message: response.message,
       };
     } catch (error) {
-      console.error('Error deleting file:', error);
+      console.error("Error deleting file:", error);
       return {
         success: false,
-        error: error.message || 'Failed to delete file'
+        error: error.message || "Failed to delete file",
       };
     }
   },
@@ -174,37 +181,41 @@ const chatService = {
   getFolders: async () => {
     try {
       const response = await httpClient.get(API_ENDPOINTS.LIST_FOLDERS);
-      
+
       return {
         success: true,
         folders: response.folders || [],
-        count: response.count || 0
+        count: response.count || 0,
       };
     } catch (error) {
-      console.error('Error getting folders:', error);
+      console.error("Error getting folders:", error);
       return {
         success: false,
         folders: [],
-        error: error.message || 'Failed to get folders'
+        error: error.message || "Failed to get folders",
       };
     }
   },
-  
+
   // Quick chat without saving conversation
   sendQuickMessage: async (message, department = null) => {
     try {
-      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
       const headers = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
       if (userInfo.student_code) {
-        headers['student_code'] = userInfo.student_code;
+        headers["student_code"] = userInfo.student_code;
       }
 
-      const response = await httpClient.post(API_ENDPOINTS.QUICK_CHAT, {
-        content: message,
-        department: department
-      }, { headers });
+      const response = await httpClient.post(
+        API_ENDPOINTS.QUICK_CHAT,
+        {
+          content: message,
+          department: department,
+        },
+        { headers },
+      );
 
       if (response.statusCode === 200 && response.data) {
         return {
@@ -218,15 +229,16 @@ const chatService = {
           metadata: response.metadata || null,
         };
       } else {
-        throw new Error(response.message || 'Failed to send message');
+        throw new Error(response.message || "Failed to send message");
       }
     } catch (error) {
-      console.error('Error sending quick message:', error);
+      console.error("Error sending quick message:", error);
       return {
         success: false,
         message: {
           id: `error_${Date.now()}`,
-          content: 'Xin lỗi, hiện tại hệ thống đang gặp sự cố. Vui lòng thử lại sau.',
+          content:
+            "Xin lỗi, hiện tại hệ thống đang gặp sự cố. Vui lòng thử lại sau.",
           isUser: false,
           createdAt: new Date().toISOString(),
         },
@@ -236,7 +248,7 @@ const chatService = {
   },
 
   // Create new conversation
-  createConversation: async (userId, title = 'Cuộc trò chuyện mới') => {
+  createConversation: async (userId, title = "Cuộc trò chuyện mới") => {
     try {
       const response = await httpClient.post(API_ENDPOINTS.CONVERSATIONS, {
         user_id: userId,
@@ -255,10 +267,10 @@ const chatService = {
           },
         };
       } else {
-        throw new Error(response.message || 'Failed to create conversation');
+        throw new Error(response.message || "Failed to create conversation");
       }
     } catch (error) {
-      console.error('Error creating conversation:', error);
+      console.error("Error creating conversation:", error);
       return {
         success: false,
         error: error.message,
@@ -270,13 +282,13 @@ const chatService = {
   getConversations: async (userId, skip = 0, limit = 20) => {
     try {
       const response = await httpClient.get(
-        `${API_ENDPOINTS.CONVERSATIONS}?user_id=${userId}&skip=${skip}&limit=${limit}`
+        `${API_ENDPOINTS.CONVERSATIONS}?user_id=${userId}&skip=${skip}&limit=${limit}`,
       );
 
       if (response.statusCode === 200 && response.data) {
         return {
           success: true,
-          conversations: response.data.map(conv => ({
+          conversations: response.data.map((conv) => ({
             id: conv._id,
             userId: conv.user_id,
             title: conv.title,
@@ -285,10 +297,10 @@ const chatService = {
           })),
         };
       } else {
-        throw new Error(response.message || 'Failed to get conversations');
+        throw new Error(response.message || "Failed to get conversations");
       }
     } catch (error) {
-      console.error('Error getting conversations:', error);
+      console.error("Error getting conversations:", error);
       return {
         success: false,
         conversations: [],
@@ -301,13 +313,13 @@ const chatService = {
   getMessages: async (conversationId, skip = 0, limit = 50) => {
     try {
       const response = await httpClient.get(
-        `${API_ENDPOINTS.MESSAGES}/${conversationId}?skip=${skip}&limit=${limit}`
+        `${API_ENDPOINTS.MESSAGES}/${conversationId}?skip=${skip}&limit=${limit}`,
       );
 
       if (response.statusCode === 200 && response.data) {
         return {
           success: true,
-          messages: response.data.map(msg => ({
+          messages: response.data.map((msg) => ({
             id: msg._id,
             content: msg.content,
             isUser: msg.is_user,
@@ -315,10 +327,10 @@ const chatService = {
           })),
         };
       } else {
-        throw new Error(response.message || 'Failed to get messages');
+        throw new Error(response.message || "Failed to get messages");
       }
     } catch (error) {
-      console.error('Error getting messages:', error);
+      console.error("Error getting messages:", error);
       return {
         success: false,
         messages: [],
@@ -328,43 +340,57 @@ const chatService = {
   },
 
   // Send message to a conversation and get AI response
-  sendMessage: async (conversationId, message, department = null) => {
+  sendMessage: async (
+    conversationId,
+    message,
+    department = null,
+    attachments = null,
+  ) => {
     try {
-      console.log(conversationId, message, department);
-      
+      console.log(conversationId, message, department, attachments);
+
       // If specific department is selected, use department-specific query
-      if (department && department !== 'default') {
-        console.log('Using department-specific query for:', department);
-        return await chatService.queryDepartment(message, department);
+      if (department && department !== "default") {
+        console.log("Using department-specific query for:", department);
+        return await chatService.queryDepartment(
+          message,
+          department,
+          attachments,
+        );
       }
-      
+
       // Otherwise use regular conversation messaging
       // Get current user info for context
-      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-      
+      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
+
       const headers = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
-      
+
       // Add student_code to header if available
       if (userInfo.student_code) {
-        headers['student_code'] = userInfo.student_code;
+        headers["student_code"] = userInfo.student_code;
       }
-      
+
       const requestBody = {
         content: message,
         is_user: true,
       };
-      
+
       // Add department if provided
       if (department) {
         requestBody.department = department;
       }
-      
+
+      // Add attachments if provided
+      if (attachments && attachments.length > 0) {
+        requestBody.attachments = attachments;
+      }
+
       const response = await httpClient.post(
         `/api/chat/${conversationId}/messages`,
         requestBody,
-        { headers }
+        { headers },
       );
 
       if (response.statusCode === 201 && response.data) {
@@ -375,25 +401,28 @@ const chatService = {
             content: response.data.content,
             isUser: response.data.is_user,
             createdAt: response.data.created_at,
+            attachments: response.data.attachments,
           },
         };
       } else {
-        throw new Error(response.message || 'Failed to send message');
+        throw new Error(response.message || "Failed to send message");
       }
     } catch (error) {
-      console.error('Error sending message:', error);
-      
+      console.error("Error sending message:", error);
+
       // Kiểm tra nếu là lỗi rate limit (HTTP 429)
       if (error.response && error.response.status === 429) {
         return {
           success: false,
           statusCode: 429,
-          message: error.response.data?.message || 'Bạn đã vượt quá giới hạn gửi tin nhắn. Vui lòng thử lại sau.',
+          message:
+            error.response.data?.message ||
+            "Bạn đã vượt quá giới hạn gửi tin nhắn. Vui lòng thử lại sau.",
           error: error.response.data?.message || error.message,
-          isRateLimit: true
+          isRateLimit: true,
         };
       }
-      
+
       return {
         success: false,
         error: error.message,
@@ -406,7 +435,7 @@ const chatService = {
     try {
       const response = await httpClient.put(
         `/api/chat/conversations/${conversationId}`,
-        { title }
+        { title },
       );
 
       if (response.statusCode === 200 && response.data) {
@@ -421,10 +450,10 @@ const chatService = {
           },
         };
       } else {
-        throw new Error(response.message || 'Failed to update conversation');
+        throw new Error(response.message || "Failed to update conversation");
       }
     } catch (error) {
-      console.error('Error updating conversation:', error);
+      console.error("Error updating conversation:", error);
       return {
         success: false,
         error: error.message,
@@ -435,7 +464,9 @@ const chatService = {
   // Delete conversation
   deleteConversation: async (conversationId) => {
     try {
-      const response = await httpClient.delete(`/api/chat/conversations/${conversationId}`);
+      const response = await httpClient.delete(
+        `/api/chat/conversations/${conversationId}`,
+      );
 
       if (response.statusCode === 200) {
         return {
@@ -443,10 +474,10 @@ const chatService = {
           message: response.message,
         };
       } else {
-        throw new Error(response.message || 'Failed to delete conversation');
+        throw new Error(response.message || "Failed to delete conversation");
       }
     } catch (error) {
-      console.error('Error deleting conversation:', error);
+      console.error("Error deleting conversation:", error);
       return {
         success: false,
         error: error.message,
@@ -460,14 +491,14 @@ const chatService = {
       const response = await httpClient.get(API_ENDPOINTS.HEALTH);
       return {
         success: true,
-        status: response.status || 'online',
+        status: response.status || "online",
         data: response,
       };
     } catch (error) {
-      console.error('Error getting chatbot status:', error);
-      return { 
+      console.error("Error getting chatbot status:", error);
+      return {
         success: false,
-        status: 'offline',
+        status: "offline",
         error: error.message,
       };
     }
@@ -487,7 +518,11 @@ const chatService = {
     if (conversationId) {
       return await chatService.getMessages(conversationId);
     } else {
-      return { success: false, messages: [], error: 'No conversation ID provided' };
+      return {
+        success: false,
+        messages: [],
+        error: "No conversation ID provided",
+      };
     }
   },
 
@@ -505,7 +540,7 @@ const chatService = {
         data: response,
       };
     } catch (error) {
-      console.error('Error sending feedback:', error);
+      console.error("Error sending feedback:", error);
       return {
         success: false,
         error: error.message,

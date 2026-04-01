@@ -195,10 +195,12 @@ const RagManagement = () => {
           // Tạo bản sao của mảng thư mục hiện tại
           const updatedFolders = [...prevFolders];
 
-          // Cập nhật số lượng file cho mỗi thư mục, tính cả file trong thư mục đó
+          // Cập nhật số lượng file cho mỗi thư mục, tính cả file trong thư mục đó và subfolder
           updatedFolders.forEach((folder) => {
             folder.files_count = fileList.filter(
-              (f) => f.folder === folder.name,
+              (f) =>
+                f.folder === folder.name ||
+                f.folder.startsWith(folder.name + "/"),
             ).length;
           });
 
@@ -1222,8 +1224,11 @@ const RagManagement = () => {
                     <div className="no-files">
                       Vui lòng chọn thư mục phòng ban để xem danh sách tài liệu
                     </div>
-                  ) : files.filter((file) => file.folder === selectedFolder)
-                      .length === 0 ? (
+                  ) : files.filter(
+                      (file) =>
+                        file.folder === selectedFolder ||
+                        file.folder.startsWith(selectedFolder + "/"),
+                    ).length === 0 ? (
                     <div className="no-files">
                       Không có tài liệu nào trong thư mục {selectedFolder}
                     </div>
@@ -1239,7 +1244,11 @@ const RagManagement = () => {
                       </thead>
                       <tbody>
                         {files
-                          .filter((file) => file.folder === selectedFolder)
+                          .filter(
+                            (file) =>
+                              file.folder === selectedFolder ||
+                              file.folder.startsWith(selectedFolder + "/"),
+                          )
                           .map((file) => (
                             <tr key={`${file.folder}-${file.filename}`}>
                               <td className="file-name">

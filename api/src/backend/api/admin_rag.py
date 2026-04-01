@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Define the data directory path
+# admin_rag.py is at: api/src/backend/api/admin_rag.py
+# We need to go up 4 levels to get to 'api/', then join with 'data'
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data"))
 
 # Ensure directories exist
@@ -59,6 +61,33 @@ class FolderRenameRequest(BaseModel):
     """Request model for renaming a folder"""
     old_name: str = Field(..., description="Current name of the folder")
     new_name: str = Field(..., description="New name for the folder")
+
+# Helper function to check files recursively
+def _has_files_recursive(folder_path):
+    """
+    Recursively check if a folder has any files (including in subfolders).
+    Ignores hidden files and __pycache__ folders.
+    """
+    try:
+        for item in os.listdir(folder_path):
+            item_path = os.path.join(folder_path, item)
+            
+            # Skip hidden files and __pycache__
+            if item.startswith('.') or item == '__pycache__':
+                continue
+            
+            # If it's a file, we found something
+            if os.path.isfile(item_path):
+                return True
+            
+            # If it's a directory, check recursively
+            elif os.path.isdir(item_path):
+                if _has_files_recursive(item_path):
+                    return True
+        
+        return False
+    except:
+        return False
 
 @router.post("/upload-training-file", response_model=Dict[str, Any])
 async def upload_training_file(
@@ -215,39 +244,45 @@ async def list_training_files(current_user: dict = Depends(get_current_user)):
             }
         
         # Function to get files from a folder
-        def get_files_from_folder(folder_path, folder_name="default"):
+        def get_files_from_folder(folder_path, folder_name=None):
             folder_files = []
             if os.path.exists(folder_path) and os.path.isdir(folder_path):
+                logger.info(f"get_files_from_folder: {folder_path}, folder_name={folder_name}")
                 for filename in os.listdir(folder_path):
                     file_path = os.path.join(folder_path, filename)
                     if os.path.isfile(file_path):
                         # Skip .gitkeep and other hidden files
                         if filename.startswith('.'):
                             continue
+                        
                             
                         file_stat = os.stat(file_path)
-                        folder_files.append({
+                        file_info = {
                             "filename": filename,
-                            "folder": folder_name,
+                            "folder": folder_name if folder_name else "",
                             "size": file_stat.st_size,
                             "last_modified": str(datetime.fromtimestamp(file_stat.st_mtime)),
                             "path": file_path
-                        })
+                        }
+                        logger.info(f"  Found file: {file_info}")
+                        folder_files.append(file_info)
                     # Đệ quy xuống các subfolder
-                    elif os.path.isdir(file_path) and filename != "__pycache__":
-                        subfolder_name = f"{folder_name}/{filename}" if folder_name != "default" else filename
+                    elif os.path.isdir(file_path) and filename != "__pycache__" and not filename.startswith('.'):
+                        if folder_name:
+                            subfolder_name = f"{folder_name}/{filename}"
+                        else:
+                            subfolder_name = filename
+                        logger.info(f"  Recursing into: {file_path} as {subfolder_name}")
                         folder_files.extend(get_files_from_folder(file_path, subfolder_name))
             return folder_files
         
-        # Get files from default folder (DATA_DIR)
-        file_list.extend(get_files_from_folder(DATA_DIR))
-        
-        # Chúng ta không cần đoạn mã dưới đây vì hàm get_files_from_folder đã được cập nhật
-        # để duyệt qua tất cả các subfolder một cách đệ quy
-        # for item in os.listdir(DATA_DIR):
-        #     item_path = os.path.join(DATA_DIR, item)
-        #     if os.path.isdir(item_path) and item != "__pycache__":
-        #         file_list.extend(get_files_from_folder(item_path, item))
+        # Get files from all folders in DATA_DIR
+        logger.info(f"Starting file scan from DATA_DIR: {DATA_DIR}")
+        for item in os.listdir(DATA_DIR):
+            item_path = os.path.join(DATA_DIR, item)
+            if os.path.isdir(item_path) and not item.startswith('.') and item != '__pycache__':
+                logger.info(f"Scanning department/folder: {item}")
+                file_list.extend(get_files_from_folder(item_path, item))
         
         logger.info(f"Found {len(file_list)} files in the data directory")
         
@@ -638,18 +673,24 @@ async def list_departments(current_user: dict = Depends(get_current_user)):
     try:
         departments = []
         
+        # Debug logging
+        logger.info(f"list_departments called. DATA_DIR = {DATA_DIR}")
+        logger.info(f"DATA_DIR exists: {os.path.exists(DATA_DIR)}")
+        
         # Scan for department folders dynamically - no default folder
         if os.path.exists(DATA_DIR):
-            for item in os.listdir(DATA_DIR):
+            items_in_data = os.listdir(DATA_DIR)
+            logger.info(f"Items in DATA_DIR: {items_in_data}")
+            
+            for item in items_in_data:
                 item_path = os.path.join(DATA_DIR, item)
+                is_dir = os.path.isdir(item_path)
+                logger.info(f"Processing {item}: is_dir={is_dir}, startswith('.')={item.startswith('.')}")
+                
                 if os.path.isdir(item_path) and not item.startswith('.') and item != '__pycache__':
-                    # Check if folder has any files
-                    has_data = False
-                    try:
-                        files_in_dept = [f for f in os.listdir(item_path) if os.path.isfile(os.path.join(item_path, f)) and not f.startswith('.')]
-                        has_data = len(files_in_dept) > 0
-                    except:
-                        has_data = False
+                    # Check if folder has any files (recursively including subfolders)
+                    has_data = _has_files_recursive(item_path)
+                    logger.info(f"Folder {item}: has_data={has_data}")
                     
                     # Create display names (with fallback for unknown departments)
                     display_names = {

@@ -204,6 +204,7 @@ function ChatApp() {
               content: msg.content,
               sender: msg.isUser ? "user" : "bot",
               timestamp: new Date(msg.createdAt),
+              attachments: msg.attachments || [], // Include attachments
             }));
             setMessages(formattedMessages);
           } else {

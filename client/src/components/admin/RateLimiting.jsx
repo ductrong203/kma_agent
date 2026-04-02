@@ -5,7 +5,8 @@ import {
   FiUsers,
   FiAlertCircle,
   FiInfo,
-  FiX,
+  FiPlus,
+  FiTrash2,
 } from "react-icons/fi";
 import "./RateLimiting.css";
 import rateLimitService from "../../services/rateLimitService";
@@ -16,7 +17,6 @@ const RateLimiting = () => {
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
 
-  // Rate limit settings
   const [settings, setSettings] = useState({
     enabled: true,
     defaultLimits: {
@@ -46,16 +46,12 @@ const RateLimiting = () => {
   });
 
   useEffect(() => {
-    // Fetch rate limit settings from the API
     const fetchSettings = async () => {
       setLoading(true);
       try {
         const response = await rateLimitService.getRateLimitConfig();
         if (response.success) {
-          // Ensure all required nested objects exist with defaults
           const configData = response.data || {};
-
-          // Create a complete settings object with all required properties
           const completeSettings = {
             enabled:
               configData.enabled !== undefined ? configData.enabled : true,
@@ -87,7 +83,6 @@ const RateLimiting = () => {
             },
             userExceptions: configData.userExceptions || [],
           };
-
           setSettings(completeSettings);
           setError(null);
         } else {
@@ -115,14 +110,11 @@ const RateLimiting = () => {
       return;
     }
 
-    // Parse the nested property path
     const path = name.split(".");
-
     setSettings((prev) => {
       const newSettings = { ...prev };
       let current = newSettings;
 
-      // Navigate to the nested property, creating objects if they don't exist
       for (let i = 0; i < path.length - 1; i++) {
         if (!current[path[i]]) {
           current[path[i]] = {};
@@ -130,10 +122,8 @@ const RateLimiting = () => {
         current = current[path[i]];
       }
 
-      // Set the value
       current[path[path.length - 1]] =
         type === "number" ? parseInt(value, 10) : value;
-
       return newSettings;
     });
   };
@@ -141,13 +131,9 @@ const RateLimiting = () => {
   const handleUserExceptionChange = (index, field, value) => {
     setSettings((prev) => {
       const newSettings = { ...prev };
-
-      // Ensure userExceptions array exists
       if (!newSettings.userExceptions) {
         newSettings.userExceptions = [];
       }
-
-      // Ensure the user exception at the specified index exists
       if (!newSettings.userExceptions[index]) {
         newSettings.userExceptions[index] = {
           username: "",
@@ -167,7 +153,6 @@ const RateLimiting = () => {
 
   const addUserException = () => {
     setSettings((prev) => {
-      // Get default values from existing settings or use fallbacks
       const defaultLimits = prev.defaultLimits || {
         requestsPerMinute: 10,
         requestsPerHour: 100,
@@ -196,7 +181,6 @@ const RateLimiting = () => {
   const removeUserException = (index) => {
     setSettings((prev) => {
       const newSettings = { ...prev };
-      // Ensure userExceptions array exists
       if (!newSettings.userExceptions) {
         newSettings.userExceptions = [];
         return newSettings;
@@ -215,7 +199,6 @@ const RateLimiting = () => {
     setError(null);
 
     try {
-      // Save the settings to the API
       const response = await rateLimitService.updateRateLimitConfig(settings);
 
       if (response.success) {
@@ -266,7 +249,6 @@ const RateLimiting = () => {
         userExceptions: [],
       });
 
-      // Hiển thị thông báo
       setSuccess(
         'Đã đặt lại cài đặt về mặc định. Nhấn "Lưu cài đặt" để áp dụng.',
       );
@@ -307,293 +289,237 @@ const RateLimiting = () => {
       </div>
 
       {success && <div className="rate-success">{success}</div>}
-
       {error && <div className="rate-error">{error}</div>}
 
-      {/* Enable/Disable Rate Limiting */}
+      {/* Enable/Disable Toggle */}
+      <div className="rate-toggle-section">
+        <label className="rate-checkbox-label">
+          <input
+            type="checkbox"
+            name="enabled"
+            checked={settings.enabled}
+            onChange={handleRateLimitChange}
+          />
+          <span>Kích hoạt giới hạn tốc độ</span>
+        </label>
+        {!settings.enabled && (
+          <p className="rate-disabled-notice">
+            Giới hạn tốc độ hiện đang bị vô hiệu hóa
+          </p>
+        )}
+      </div>
+
+      {/* Default Limits Section */}
       <div className="rate-section">
-        <div className="rate-toggle">
-          <label>
+        <h3>
+          <FiUsers /> Giới hạn mặc định
+        </h3>
+        <p className="rate-section-desc">
+          Các giới hạn này sẽ được áp dụng cho tất cả người dùng không có ngoại
+          lệ
+        </p>
+        <div className="rate-grid">
+          <div className="rate-field">
+            <label>Yêu cầu/phút</label>
             <input
-              type="checkbox"
-              name="enabled"
-              checked={settings.enabled}
+              type="number"
+              name="defaultLimits.requestsPerMinute"
+              value={settings.defaultLimits?.requestsPerMinute || 0}
               onChange={handleRateLimitChange}
+              disabled={!settings.enabled}
             />
-            <span className="toggle-label">Kích hoạt giới hạn tốc độ</span>
-            <span
-              className={`toggle-status ${settings.enabled ? "enabled" : "disabled"}`}
-            >
-              {settings.enabled ? "Đang kích hoạt" : "Đã tắt"}
-            </span>
-          </label>
+          </div>
+          <div className="rate-field">
+            <label>Yêu cầu/giờ</label>
+            <input
+              type="number"
+              name="defaultLimits.requestsPerHour"
+              value={settings.defaultLimits?.requestsPerHour || 0}
+              onChange={handleRateLimitChange}
+              disabled={!settings.enabled}
+            />
+          </div>
+          <div className="rate-field">
+            <label>Yêu cầu/ngày</label>
+            <input
+              type="number"
+              name="defaultLimits.requestsPerDay"
+              value={settings.defaultLimits?.requestsPerDay || 0}
+              onChange={handleRateLimitChange}
+              disabled={!settings.enabled}
+            />
+          </div>
+          <div className="rate-field">
+            <label>Token/ngày</label>
+            <input
+              type="number"
+              name="defaultLimits.tokensPerDay"
+              value={settings.defaultLimits?.tokensPerDay || 0}
+              onChange={handleRateLimitChange}
+              disabled={!settings.enabled}
+            />
+          </div>
+          <div className="rate-field">
+            <label>Token/tháng</label>
+            <input
+              type="number"
+              name="defaultLimits.tokensPerMonth"
+              value={settings.defaultLimits?.tokensPerMonth || 0}
+              onChange={handleRateLimitChange}
+              disabled={!settings.enabled}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Default Limits
-      // <div className={`rate-section ${!settings.enabled ? 'disabled-section' : ''}`}>
-      //   <h3 className="section-title">
-      //     <FiUsers />
-      //     <span>Giới hạn mặc định</span>
-      //   </h3>
-        
-      //   <div className="limits-grid">
-      //     <div className="limit-card">
-      //       <div className="limit-icon">
-      //         <FiClock />
-      //       </div>
-      //       <div className="limit-content">
-      //         <h4>Số yêu cầu mỗi phút</h4>
-      //         <input
-      //           type="number"
-      //           name="defaultLimits.requestsPerMinute"
-      //           value={settings.defaultLimits?.requestsPerMinute || 10}
-      //           onChange={handleRateLimitChange}
-      //           min="1"
-      //           disabled={!settings.enabled}
-      //         />
-      //       </div>
-      //     </div>
-          
-      //     <div className="limit-card">
-      //       <div className="limit-icon">
-      //         <FiClock />
-      //       </div>
-      //       <div className="limit-content">
-      //         <h4>Số yêu cầu mỗi giờ</h4>
-      //         <input
-      //           type="number"
-      //           name="defaultLimits.requestsPerHour"
-      //           value={settings.defaultLimits?.requestsPerHour || 100}
-      //           onChange={handleRateLimitChange}
-      //           min="1"
-      //           disabled={!settings.enabled}
-      //         />
-      //       </div>
-      //     </div>
-          
-      //     <div className="limit-card">
-      //       <div className="limit-icon">
-      //         <FiClock />
-      //       </div>
-      //       <div className="limit-content">
-      //         <h4>Số yêu cầu mỗi ngày</h4>
-      //         <input
-      //           type="number"
-      //           name="defaultLimits.requestsPerDay"
-      //           value={settings.defaultLimits?.requestsPerDay || 500}
-      //           onChange={handleRateLimitChange}
-      //           min="1"
-      //           disabled={!settings.enabled}
-      //         />
-      //       </div>
-      //     </div>
-          
-      //     <div className="limit-card">
-      //       <div className="limit-icon token-icon">
-      //         <span>T</span>
-      //       </div>
-      //       <div className="limit-content">
-      //         <h4>Token mỗi ngày</h4>
-      //         <input
-      //           type="number"
-      //           name="defaultLimits.tokensPerDay"
-      //           value={settings.defaultLimits?.tokensPerDay || 50000}
-      //           onChange={handleRateLimitChange}
-      //           min="1000"
-      //           step="1000"
-      //           disabled={!settings.enabled}
-      //         />
-      //       </div>
-      //     </div>
-          
-      //     <div className="limit-card">
-      //       <div className="limit-icon token-icon">
-      //         <span>T</span>
-      //       </div>
-      //       <div className="limit-content">
-      //         <h4>Token mỗi tháng</h4>
-      //         <input
-      //           type="number"
-      //           name="defaultLimits.tokensPerMonth"
-      //           value={settings.defaultLimits?.tokensPerMonth || 500000}
-      //           onChange={handleRateLimitChange}
-      //           min="1000"
-      //           step="1000"
-      //           disabled={!settings.enabled}
-      //         />
-      //       </div>
-      //     </div>
-      //   </div>
-      </div> */}
-
-      {/* Role-based Limits */}
-      <div
-        className={`rate-section ${!settings.enabled ? "disabled-section" : ""}`}
-      >
-        <h3 className="section-title">
-          <FiUsers />
-          <span>Giới hạn theo vai trò</span>
+      {/* Role-based Limits Section */}
+      <div className="rate-section">
+        <h3>
+          <FiAlertCircle /> Giới hạn theo vai trò
         </h3>
+        <p className="rate-section-desc">
+          Thiết lập giới hạn khác nhau cho các vai trò khác nhau
+        </p>
 
-        <div className="role-limits">
-          <div className="role-limit-card">
-            <h4 className="role-title admin">Quản trị viên</h4>
-            <div className="role-limits-grid">
-              <div className="role-limit-item">
-                <label>Yêu cầu/phút</label>
-                <input
-                  type="number"
-                  name="roleLimits.admin.requestsPerMinute"
-                  value={settings.roleLimits?.admin?.requestsPerMinute || 30}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Yêu cầu/giờ</label>
-                <input
-                  type="number"
-                  name="roleLimits.admin.requestsPerHour"
-                  value={settings.roleLimits?.admin?.requestsPerHour || 300}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Yêu cầu/ngày</label>
-                <input
-                  type="number"
-                  name="roleLimits.admin.requestsPerDay"
-                  value={settings.roleLimits?.admin?.requestsPerDay || 1000}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Token/ngày</label>
-                <input
-                  type="number"
-                  name="roleLimits.admin.tokensPerDay"
-                  value={settings.roleLimits?.admin?.tokensPerDay || 200000}
-                  onChange={handleRateLimitChange}
-                  min="1000"
-                  step="1000"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Token/tháng</label>
-                <input
-                  type="number"
-                  name="roleLimits.admin.tokensPerMonth"
-                  value={settings.roleLimits?.admin?.tokensPerMonth || 2000000}
-                  onChange={handleRateLimitChange}
-                  min="1000"
-                  step="1000"
-                  disabled={!settings.enabled}
-                />
-              </div>
+        {/* Admin Role */}
+        <div className="rate-role-subsection">
+          <h4>Quản trị viên (Admin)</h4>
+          <div className="rate-grid">
+            <div className="rate-field">
+              <label>Yêu cầu/phút</label>
+              <input
+                type="number"
+                name="roleLimits.admin.requestsPerMinute"
+                value={settings.roleLimits?.admin?.requestsPerMinute || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Yêu cầu/giờ</label>
+              <input
+                type="number"
+                name="roleLimits.admin.requestsPerHour"
+                value={settings.roleLimits?.admin?.requestsPerHour || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Yêu cầu/ngày</label>
+              <input
+                type="number"
+                name="roleLimits.admin.requestsPerDay"
+                value={settings.roleLimits?.admin?.requestsPerDay || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Token/ngày</label>
+              <input
+                type="number"
+                name="roleLimits.admin.tokensPerDay"
+                value={settings.roleLimits?.admin?.tokensPerDay || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Token/tháng</label>
+              <input
+                type="number"
+                name="roleLimits.admin.tokensPerMonth"
+                value={settings.roleLimits?.admin?.tokensPerMonth || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
             </div>
           </div>
+        </div>
 
-          <div className="role-limit-card">
-            <h4 className="role-title user">Người dùng</h4>
-            <div className="role-limits-grid">
-              <div className="role-limit-item">
-                <label>Yêu cầu/phút</label>
-                <input
-                  type="number"
-                  name="roleLimits.user.requestsPerMinute"
-                  value={settings.roleLimits?.user?.requestsPerMinute || 10}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Yêu cầu/giờ</label>
-                <input
-                  type="number"
-                  name="roleLimits.user.requestsPerHour"
-                  value={settings.roleLimits?.user?.requestsPerHour || 100}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Yêu cầu/ngày</label>
-                <input
-                  type="number"
-                  name="roleLimits.user.requestsPerDay"
-                  value={settings.roleLimits?.user?.requestsPerDay || 500}
-                  onChange={handleRateLimitChange}
-                  min="1"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Token/ngày</label>
-                <input
-                  type="number"
-                  name="roleLimits.user.tokensPerDay"
-                  value={settings.roleLimits?.user?.tokensPerDay || 50000}
-                  onChange={handleRateLimitChange}
-                  min="1000"
-                  step="1000"
-                  disabled={!settings.enabled}
-                />
-              </div>
-              <div className="role-limit-item">
-                <label>Token/tháng</label>
-                <input
-                  type="number"
-                  name="roleLimits.user.tokensPerMonth"
-                  value={settings.roleLimits?.user?.tokensPerMonth || 500000}
-                  onChange={handleRateLimitChange}
-                  min="1000"
-                  step="1000"
-                  disabled={!settings.enabled}
-                />
-              </div>
+        {/* User Role */}
+        <div className="rate-role-subsection">
+          <h4>Người dùng thường (User)</h4>
+          <div className="rate-grid">
+            <div className="rate-field">
+              <label>Yêu cầu/phút</label>
+              <input
+                type="number"
+                name="roleLimits.user.requestsPerMinute"
+                value={settings.roleLimits?.user?.requestsPerMinute || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Yêu cầu/giờ</label>
+              <input
+                type="number"
+                name="roleLimits.user.requestsPerHour"
+                value={settings.roleLimits?.user?.requestsPerHour || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Yêu cầu/ngày</label>
+              <input
+                type="number"
+                name="roleLimits.user.requestsPerDay"
+                value={settings.roleLimits?.user?.requestsPerDay || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Token/ngày</label>
+              <input
+                type="number"
+                name="roleLimits.user.tokensPerDay"
+                value={settings.roleLimits?.user?.tokensPerDay || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
+            </div>
+            <div className="rate-field">
+              <label>Token/tháng</label>
+              <input
+                type="number"
+                name="roleLimits.user.tokensPerMonth"
+                value={settings.roleLimits?.user?.tokensPerMonth || 0}
+                onChange={handleRateLimitChange}
+                disabled={!settings.enabled}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* User-specific Exceptions */}
-      <div
-        className={`rate-section ${!settings.enabled ? "disabled-section" : ""}`}
-      >
-        <h3 className="section-title">
-          <FiAlertCircle />
-          <span>Ngoại lệ cho người dùng cụ thể</span>
-        </h3>
+      {/* User Exceptions Section */}
+      <div className="rate-section">
+        <div className="rate-section-header">
+          <h3>
+            <FiUsers /> Ngoại lệ cho người dùng cụ thể
+          </h3>
+          <button className="rate-add-button" onClick={addUserException}>
+            <FiPlus />
+            <span>Thêm ngoại lệ</span>
+          </button>
+        </div>
+        <p className="rate-section-desc">
+          Đặt giới hạn tốc độ tùy chỉnh cho từng người dùng cụ thể
+        </p>
 
-        <div className="exceptions-container">
-          {settings.userExceptions.map((exception, index) => (
-            <div key={index} className="exception-card">
-              <div className="exception-header">
-                <h4>Ngoại lệ #{index + 1}</h4>
-                <button
-                  className="remove-exception"
-                  onClick={() => removeUserException(index)}
-                  disabled={!settings.enabled}
-                >
-                  <FiX />
-                </button>
-              </div>
-
-              <div className="exception-content">
-                <div className="exception-field">
-                  <label>Tên người dùng</label>
+        {settings.userExceptions && settings.userExceptions.length > 0 ? (
+          <div className="rate-exceptions-list">
+            {settings.userExceptions.map((exception, index) => (
+              <div key={index} className="rate-exception-item">
+                <div className="rate-exception-header">
                   <input
                     type="text"
-                    value={exception.username}
+                    placeholder="Tên người dùng"
+                    value={exception.username || ""}
                     onChange={(e) =>
                       handleUserExceptionChange(
                         index,
@@ -601,17 +527,23 @@ const RateLimiting = () => {
                         e.target.value,
                       )
                     }
-                    placeholder="Nhập tên người dùng"
                     disabled={!settings.enabled}
+                    className="rate-username-input"
                   />
+                  <button
+                    className="rate-delete-button"
+                    onClick={() => removeUserException(index)}
+                  >
+                    <FiTrash2 />
+                  </button>
                 </div>
 
-                <div className="exception-limits">
-                  <div className="exception-limit">
+                <div className="rate-grid">
+                  <div className="rate-field">
                     <label>Yêu cầu/phút</label>
                     <input
                       type="number"
-                      value={exception.requestsPerMinute}
+                      value={exception.requestsPerMinute || 0}
                       onChange={(e) =>
                         handleUserExceptionChange(
                           index,
@@ -619,16 +551,14 @@ const RateLimiting = () => {
                           e.target.value,
                         )
                       }
-                      min="1"
                       disabled={!settings.enabled}
                     />
                   </div>
-
-                  <div className="exception-limit">
+                  <div className="rate-field">
                     <label>Yêu cầu/giờ</label>
                     <input
                       type="number"
-                      value={exception.requestsPerHour}
+                      value={exception.requestsPerHour || 0}
                       onChange={(e) =>
                         handleUserExceptionChange(
                           index,
@@ -636,16 +566,14 @@ const RateLimiting = () => {
                           e.target.value,
                         )
                       }
-                      min="1"
                       disabled={!settings.enabled}
                     />
                   </div>
-
-                  <div className="exception-limit">
+                  <div className="rate-field">
                     <label>Yêu cầu/ngày</label>
                     <input
                       type="number"
-                      value={exception.requestsPerDay}
+                      value={exception.requestsPerDay || 0}
                       onChange={(e) =>
                         handleUserExceptionChange(
                           index,
@@ -653,16 +581,14 @@ const RateLimiting = () => {
                           e.target.value,
                         )
                       }
-                      min="1"
                       disabled={!settings.enabled}
                     />
                   </div>
-
-                  <div className="exception-limit">
+                  <div className="rate-field">
                     <label>Token/ngày</label>
                     <input
                       type="number"
-                      value={exception.tokensPerDay}
+                      value={exception.tokensPerDay || 0}
                       onChange={(e) =>
                         handleUserExceptionChange(
                           index,
@@ -670,17 +596,14 @@ const RateLimiting = () => {
                           e.target.value,
                         )
                       }
-                      min="1000"
-                      step="1000"
                       disabled={!settings.enabled}
                     />
                   </div>
-
-                  <div className="exception-limit">
+                  <div className="rate-field">
                     <label>Token/tháng</label>
                     <input
                       type="number"
-                      value={exception.tokensPerMonth}
+                      value={exception.tokensPerMonth || 0}
                       onChange={(e) =>
                         handleUserExceptionChange(
                           index,
@@ -688,24 +611,21 @@ const RateLimiting = () => {
                           e.target.value,
                         )
                       }
-                      min="1000"
-                      step="1000"
                       disabled={!settings.enabled}
                     />
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-
-          <button
-            className="add-exception-button"
-            onClick={addUserException}
-            disabled={!settings.enabled}
-          >
-            + Thêm ngoại lệ cho người dùng
-          </button>
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rate-empty-message">
+            <p>
+              Chưa có ngoại lệ nào. Nhấn "Thêm ngoại lệ" để tạo giới hạn tùy
+              chỉnh cho một người dùng cụ thể.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

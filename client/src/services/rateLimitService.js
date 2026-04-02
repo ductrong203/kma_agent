@@ -55,139 +55,136 @@ const MOCK_DATA = {
   },
 };
 
-class RateLimitService {
+const rateLimitService = {
   /**
-   * Lấy cấu hình giới hạn tốc độ
-   * @returns {Promise<Object>} - Cấu hình giới hạn tốc độ
+   * Get rate limit configuration
+   * @returns {Promise<Object>} - Rate limit config
    */
-  async getRateLimitConfig() {
+  getRateLimitConfig: async function () {
     try {
-      // First try the real API
       try {
         const response = await httpClient.get("/api/rate-limits");
         return {
           success: true,
           data: response.data,
-          message:
-            response.message || "Lấy cấu hình giới hạn tốc độ thành công",
+          message: response.message || "Tải cấu hình thành công",
         };
       } catch (apiError) {
         console.warn(
-          "Sử dụng dữ liệu mẫu cho cấu hình giới hạn tốc độ:",
+          "API không khả dụng, sử dụng dữ liệu mẫu:",
           apiError.message,
         );
-
-        // Convert mock data to the expected format if needed
+        // Return mock success with default config
         return {
           success: true,
-          data: MOCK_DATA.config,
-          message: "Lấy cấu hình giới hạn tốc độ thành công (dữ liệu mẫu)",
+          data: {
+            enabled: true,
+            defaultLimits: {
+              requestsPerMinute: 10,
+              requestsPerHour: 100,
+              requestsPerDay: 500,
+              tokensPerDay: 50000,
+              tokensPerMonth: 500000,
+            },
+            roleLimits: {
+              admin: {
+                requestsPerMinute: 30,
+                requestsPerHour: 300,
+                requestsPerDay: 1000,
+                tokensPerDay: 200000,
+                tokensPerMonth: 2000000,
+              },
+              user: {
+                requestsPerMinute: 10,
+                requestsPerHour: 100,
+                requestsPerDay: 500,
+                tokensPerDay: 50000,
+                tokensPerMonth: 500000,
+              },
+            },
+            userExceptions: [],
+          },
+          message: "Dữ liệu mẫu (API chưa sẵn sàng)",
         };
       }
     } catch (error) {
       console.error("Lỗi khi lấy cấu hình giới hạn tốc độ:", error);
       return {
         success: false,
-        error: error.message || "Lỗi khi lấy cấu hình giới hạn tốc độ",
+        error: error.message || "Lỗi khi lấy cấu hình",
       };
     }
-  }
+  },
 
   /**
-   * Cập nhật cấu hình giới hạn tốc độ
-   * @param {Object} config - Cấu hình giới hạn tốc độ mới
-   * @returns {Promise<Object>} - Kết quả cập nhật
+   * Update rate limit configuration
+   * @param {Object} config - New rate limit configuration
+   * @returns {Promise<Object>} - Update result
    */
-  async updateRateLimitConfig(config) {
+  updateRateLimitConfig: async function (config) {
     try {
-      // First try the real API
       try {
         const response = await httpClient.put("/api/rate-limits", config);
         return {
           success: true,
-          message:
-            response.message || "Cập nhật cấu hình giới hạn tốc độ thành công",
+          message: response.message || "Cập nhật cấu hình thành công",
         };
       } catch (apiError) {
         console.warn(
-          "Sử dụng dữ liệu mẫu cho cập nhật giới hạn tốc độ:",
+          "API không khả dụng, sử dụng dữ liệu mẫu:",
           apiError.message,
         );
         // Return mock success if API fails
         return {
           success: true,
-          message: "Cập nhật cấu hình giới hạn tốc độ thành công (dữ liệu mẫu)",
+          message: "Cập nhật thành công (dữ liệu mẫu)",
         };
       }
     } catch (error) {
       console.error("Lỗi khi cập nhật cấu hình giới hạn tốc độ:", error);
       return {
         success: false,
-        error: error.message || "Lỗi khi cập nhật cấu hình giới hạn tốc độ",
+        error: error.message || "Lỗi khi cập nhật cấu hình",
       };
     }
-  }
+  },
 
   /**
-   * Lấy thống kê sử dụng và giới hạn của người dùng hiện tại
-   * @returns {Promise<Object>} - Thống kê sử dụng và giới hạn
+   * Get rate limit statistics for a user
+   * @returns {Promise<Object>} - User rate limit statistics
    */
-  async getRateLimitStats() {
+  getRateLimitStats: async function () {
     try {
-      // First try the real API
       try {
         const response = await httpClient.get("/api/rate-limits/stats");
         return {
           success: true,
-          data: response.data,
-          message:
-            response.message || "Lấy thống kê giới hạn tốc độ thành công",
+          data: response.data || {},
+          message: response.message || "Tải thống kê thành công",
         };
       } catch (apiError) {
-        console.warn(
-          "Sử dụng dữ liệu mẫu cho thống kê sử dụng:",
-          apiError.message,
-        );
-
-        // Return mock data in the format expected by UsageStats component
+        console.warn("API không khả dụng:", apiError.message);
+        // Return mock stats
         return {
           success: true,
-          data: MOCK_DATA.stats,
-          message: "Lấy thống kê giới hạn tốc độ thành công (dữ liệu mẫu)",
+          data: {
+            requestsPerMinute: 5,
+            requestsPerHour: 25,
+            requestsPerDay: 120,
+            tokensToday: 3500,
+            tokensThisMonth: 25000,
+          },
+          message: "Dữ liệu mẫu (API chưa sẵn sàng)",
         };
       }
     } catch (error) {
       console.error("Lỗi khi lấy thống kê giới hạn tốc độ:", error);
       return {
         success: false,
-        error: error.message || "Lỗi khi lấy thống kê giới hạn tốc độ",
+        error: error.message || "Lỗi khi lấy thống kê",
       };
     }
-  }
+  },
+};
 
-  /**
-   * Lấy tổng quan thống kê sử dụng từ API Admin
-   * @returns {Promise<Object>} - Tổng quan thống kê sử dụng
-   */
-  async getUsageSummary() {
-    try {
-      const response = await httpClient.get(
-        "/api/admin/rate-limits/usage-summary",
-      );
-      return {
-        success: true,
-        data: response.data,
-        message: "Lấy tổng quan thống kê sử dụng thành công",
-      };
-    } catch (error) {
-      console.error("Lỗi khi lấy tổng quan thống kê sử dụng:", error);
-      return {
-        success: false,
-        error: error.message || "Lỗi khi lấy tổng quan thống kê sử dụng",
-      };
-    }
-  }
-}
-
-const rateLimitService = new RateLimitService();
 export default rateLimitService;

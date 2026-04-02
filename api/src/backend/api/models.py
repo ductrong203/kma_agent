@@ -45,6 +45,9 @@ async def get_all_models(current_user: dict = Depends(require_auth)):
 async def get_active_model(current_user: dict = Depends(require_auth)):
     """
     Lấy thông tin về mô hình đang hoạt động
+    
+    ⚠️ IMPORTANT: This endpoint returns DB info WITHOUT modifying runtime state.
+    Runtime state is ONLY modified by POST /activate/{model_id}
     """
     try:
         # Tìm model đang hoạt động (isActive = True)
@@ -60,6 +63,10 @@ async def get_active_model(current_user: dict = Depends(require_auth)):
         # Chuyển đổi ObjectId thành string
         active_model["id"] = str(active_model["_id"])
         del active_model["_id"]
+        
+        # 🔴 DO NOT call set_active_model_from_dict() here!
+        # It would override _runtime_model_type set by admin selection
+        # Just return DB info without modifying runtime state
         
         return BaseResponse(
             statusCode=status.HTTP_200_OK,
@@ -113,6 +120,14 @@ async def activate_model(
                 }
             }
         )
+        
+        # Update model_manager cache so LLM instances use new model immediately
+        try:
+            from llm.model_manager import model_manager
+            model_manager.set_active_model_from_dict(model_to_activate)
+            logger.info(f"✅ Updated model_manager cache with active model: {model_to_activate.get('name')}")
+        except Exception as e:
+            logger.warning(f"Could not update model_manager cache: {e}")
         
         return BaseResponse(
             statusCode=status.HTTP_200_OK,

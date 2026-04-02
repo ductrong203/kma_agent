@@ -106,6 +106,21 @@ async def startup_db_client():
         logger.exception(f"❌ MongoDB connection failed: {str(e)}")
         raise Exception("Failed to connect to MongoDB. Application cannot start.")
     
+    # Initialize model_manager with active model from DB
+    try:
+        logger.info("🤖 Loading active LLM model...")
+        from llm.model_manager import model_manager
+        
+        # Get active model from MongoDB
+        active_model = await db.llm_models.find_one({"isActive": True})
+        if active_model:
+            model_manager.set_active_model_from_dict(active_model)
+            logger.info(f"✅ Active LLM model loaded: {active_model.get('name')} ({active_model.get('modelType')})")
+        else:
+            logger.warning("⚠️  No active model found in database, will use environment defaults")
+    except Exception as e:
+        logger.warning(f"⚠️  Could not initialize model_manager: {e}")
+    
     # Test Milvus Cloud connection - EAGER INIT
     try:
         logger.info("🔗 Testing Milvus Cloud connection...")

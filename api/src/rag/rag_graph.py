@@ -257,7 +257,7 @@ from langsmith import Client
 from pydantic import Field, BaseModel
 
 # Sử dụng get_llm để respect runtime model selection (Ollama/Gemini)
-from llm import LLMConfig, get_llm
+from ..llm import LLMConfig, get_llm
 from .retriever import create_hybrid_retriever
 from .semantic_analyzer import analyze_query_semantic_filter
 
@@ -351,8 +351,10 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
         retriever = get_retriever()
 
     if llm is None:
+        logger.critical(f"🚨 LLM IS NONE - About to call get_llm()")
         # Sử dụng get_llm() để respect runtime model selection (Ollama/Gemini)
         llm = get_llm()
+        logger.critical(f"🚨 get_llm() returned: {type(llm).__name__} from {type(llm).__module__}")
 
     # Load prompts
     prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
@@ -472,6 +474,29 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     # Generate answer
     prompt = generate_prompt.format(question=query, context=context)
     logger.info(f"📋 Prompt length: {len(prompt)} chars")
+    
+    # Log which LLM model will be used
+    try:
+        # IMPORTANT: Log the ACTUAL llm instance type, not what model_manager says now
+        # (model_manager state might have changed since llm was created)
+        llm_type_name = type(llm).__name__
+        llm_module = type(llm).__module__
+        
+        logger.critical(f"🚨 DEBUG: llm is None? {llm is None}")
+        logger.critical(f"🚨 DEBUG: llm type: {llm_type_name}")
+        logger.critical(f"🚨 DEBUG: llm module: {llm_module}")
+        logger.info(f"🤖 [RAG] LLM instance type: {llm_type_name}")
+        
+        # Determine which model based on actual instance
+        if llm_type_name == "ChatOllama":
+            logger.info(f"🤖 [RAG] Using actual LLM: Ollama")
+        elif llm_type_name == "ChatGoogleGenerativeAI":
+            logger.info(f"🤖 [RAG] Using actual LLM: Gemini")
+        else:
+            logger.info(f"🤖 [RAG] Using actual LLM: {llm_type_name}")
+    except Exception as e:
+        logger.warning(f"⚠️ [RAG] Could not log LLM info: {e}")
+    
     logger.info(f"🤖 Invoking LLM...")
     
     # Call LLM directly with prompt string

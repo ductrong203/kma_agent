@@ -126,6 +126,7 @@ class ConversationResponse(BaseModel):
     title: str
     created_at: datetime
     updated_at: datetime
+    preview: Optional[str] = None  # First user message preview
     
     model_config = {
         "populate_by_name": True

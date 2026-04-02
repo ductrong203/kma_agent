@@ -10,9 +10,10 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
 from .state import MyAgentState
-from llm.config import get_gemini_llm, get_llm
-from rag import create_rag_tool
-from score import get_student_scores, get_student_info, calculate_average_scores
+from ..llm.config import get_gemini_llm, get_llm
+from ..llm.model_manager import model_manager, ModelType
+from ..rag import create_rag_tool
+from ..score import get_student_scores, get_student_info, calculate_average_scores
 
 load_dotenv()
 
@@ -145,6 +146,22 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
 
 async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
     logger.info("--- AGENT (No Human Loop): Calling LLM ---")
+    
+    # Log active model at the start for debugging
+    try:
+        active_model_type = model_manager.get_model_type()
+        logger.info(f"🤖 [AGENT START] Active model type: {active_model_type}")
+        logger.info(f"🤖 [AGENT START] Model type name: {active_model_type.name}")
+        
+        # Also log which specific model name will be used
+        if active_model_type == ModelType.OLLAMA:
+            ollama_info = model_manager.get_ollama_info()
+            logger.info(f"🤖 [AGENT START] Using Ollama model: {ollama_info.get('model')}")
+        elif active_model_type == ModelType.GEMINI:
+            gemini_info = model_manager.get_gemini_info()
+            logger.info(f"🤖 [AGENT START] Using Gemini model: {gemini_info.get('model')}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not log model info: {e}")
 
     # Prepare the prompts
     tool_descriptions = get_tool_descriptions(tools)
@@ -292,6 +309,20 @@ Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhấ
     
     logger.info(f"📎 Has file context in LLM call: {has_file_context}")
     
+    # Log active model information for debugging
+    try:
+        active_model_type = model_manager.get_model_type()
+        logger.info(f"🤖 Active model type: {active_model_type}")
+        logger.info(f"🤖 Model type name: {active_model_type.name}")
+        if active_model_type == ModelType.OLLAMA:
+            ollama_info = model_manager.get_ollama_info()
+            logger.info(f"🤖 Using Ollama: {ollama_info.get('model')}")
+        elif active_model_type == ModelType.GEMINI:
+            gemini_info = model_manager.get_gemini_info()
+            logger.info(f"🤖 Using Gemini: {gemini_info.get('model')}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not get model info: {e}")
+    
     # Bind tools only if no file context
     if has_file_context:
         logger.info("⏭️  Skipping tool binding - file context present, direct LLM response")
@@ -307,9 +338,11 @@ Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhấ
         # Log tool calls for debugging
         if hasattr(response, 'tool_calls') and response.tool_calls:
             logger.info(f"--- AGENT: Tool calls detected: {[tool_call.get('name', 'unknown') for tool_call in response.tool_calls]} ---")
+            logger.info(f"Response from tool calls: {response.content[:200] if hasattr(response, 'content') else 'N/A'}...")
         else:
             logger.info("--- AGENT: No tool calls detected ---")
             logger.info(f"Response content preview: {response.content[:200]}...")
+            logger.info(f"Response model used: {response.__class__.__name__}")
             
         return {"messages": state['messages'] + [response]}
 

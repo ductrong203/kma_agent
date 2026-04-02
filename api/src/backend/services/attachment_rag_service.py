@@ -3,6 +3,7 @@ RAG (Retrieval-Augmented Generation) Service for file attachments
 Integrates file embeddings with the chat system
 """
 import logging
+import re
 from typing import List, Optional, Dict
 import io
 import tempfile
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 
 from langchain_ollama import OllamaEmbeddings
 from rag.retriever import extract_text_from_file
+from rag.table_aware_chunking import enhanced_text_chunking
 
 load_dotenv()
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -21,21 +23,23 @@ logger = logging.getLogger(__name__)
 class AttachmentRAGService:
     """Handle RAG operations for document attachments"""
     
-    def __init__(self, file_service, vector_store_service):
+    def __init__(self, file_service, vector_store_service, db=None):
         self.file_service = file_service
         self.vector_store_service = vector_store_service
-        # Initialize OllamaEmbeddings with 384-dim model matching Milvus schema
+        self.db = db
+        # Initialize OllamaEmbeddings with fixed 384-dim model for Milvus schema
         self.embeddings = OllamaEmbeddings(
             model="nomic-embed-text:latest",
             base_url=OLLAMA_BASE_URL
         )
+        logger.info("✅ AttachmentRAGService initialized with embedding model: nomic-embed-text:latest")
     
     async def process_file_attachment(
         self,
         file_id: str,
         file_bytes: bytes,
         mime_type: str,
-        chunk_size: int = 500
+        chunk_size: int = 800
     ) -> Dict:
         """
         Process file attachment: extract text, generate embeddings, store
@@ -78,9 +82,9 @@ class AttachmentRAGService:
             
             logger.info(f"✅ Step 1 complete: {len(text)} characters extracted")
             
-            # Split into chunks
-            logger.info(f"Step 2/4: Chunking text")
-            chunks = self._chunk_text(text, chunk_size)
+            # Split into chunks using smart chunking strategy
+            logger.info(f"Step 2/4: Smart chunking text (size={chunk_size})")
+            chunks = self._smart_chunk_text(text, mime_type, chunk_size)
             logger.info(f"✅ Step 2 complete: {len(chunks)} chunks created")
             
             if not chunks:
@@ -213,33 +217,81 @@ class AttachmentRAGService:
                 except Exception as e:
                     logger.warning(f"Failed to clean up temp file {temp_file_path}: {str(e)}")
     
-    def _chunk_text(self, text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
+    def _smart_chunk_text(self, text: str, mime_type: str, chunk_size: int = 800) -> List[str]:
         """
-        Split text into overlapping chunks
+        Use enhanced_text_chunking from table_aware_chunking.py
+        Already handles:
+        - Table preservation
+        - Vietnamese legal structure
+        - Large file splitting
+        - Overlapping chunks
+        
+        Args:
+            text: Full text content
+            mime_type: File MIME type (for context)
+            chunk_size: Target chunk size
+            
+        Returns:
+            List of text chunks
+        """
+        chunk_settings = {
+            'chunk_size': chunk_size,
+            'chunk_overlap': 200,
+            'max_chunk_size': chunk_size * 2,
+            'min_chunk_size': chunk_size // 2,
+            'overlap_size': 200
+        }
+        
+        logger.info(f"🔄 Smart chunking with enhanced_text_chunking (size={chunk_size})")
+        try:
+            chunks = enhanced_text_chunking(text, chunk_settings)
+            
+            if chunks:
+                avg_size = sum(len(c) for c in chunks) // len(chunks)
+                total_chars = sum(len(c) for c in chunks)
+                logger.info(f"✅ Chunking success: {len(chunks)} chunks, avg {avg_size} chars, total {total_chars}")
+                
+                # Check for metrics keywords
+                metrics_keywords = ['độ đo', 'metrics', 'cosine', 'precision', 'recall', 'map', 'ndcg', 'mRR', '评估']
+                chunks_with_metrics = sum(1 for c in chunks if any(kw.lower() in c.lower() for kw in metrics_keywords))
+                logger.info(f"   📊 Chunks with metrics keywords: {chunks_with_metrics}/{len(chunks)}")
+            else:
+                logger.warning(f"⚠️  No chunks created by enhanced_text_chunking")
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"❌ enhanced_text_chunking failed: {str(e)}", exc_info=True)
+            logger.warning(f"   Falling back to fallback_chunk_text")
+            return self._fallback_chunk_text(text, chunk_size)
+    
+    def _fallback_chunk_text(self, text: str, chunk_size: int = 800) -> List[str]:
+        """
+        Fallback chunking if enhanced chunking fails
+        Simple overlapping chunks
         
         Args:
             text: Full text
             chunk_size: Characters per chunk
-            overlap: Overlap between chunks
             
         Returns:
             List of text chunks
         """
         chunks = []
-        
-        # Clean text
         text = text.strip()
         
         if len(text) <= chunk_size:
-            chunks.append(text)
-        else:
-            # Create overlapping chunks
-            step = chunk_size - overlap
-            for i in range(0, len(text), step):
-                chunk = text[i:i + chunk_size]
-                if chunk.strip():
-                    chunks.append(chunk)
+            return [text] if text else []
         
+        # Create overlapping chunks
+        overlap = 200
+        step = chunk_size - overlap
+        for i in range(0, len(text), step):
+            chunk = text[i:i + chunk_size]
+            if chunk.strip():
+                chunks.append(chunk)
+        
+        logger.info(f"   ℹ️  Fallback chunking created {len(chunks)} chunks")
         return chunks
     
     async def search_attachments(
@@ -389,10 +441,17 @@ def get_attachment_rag_service(
             db = mongodb.db
             file_service = file_service or FileManagementService(db)
             vector_store_service = vector_store_service or get_vector_store_service()
+        else:
+            # Get db from file_service if available
+            db = getattr(file_service, 'db', None)
+            if db is None:
+                from ..db.mongodb import mongodb
+                db = mongodb.db
         
         _attachment_rag_service = AttachmentRAGService(
             file_service,
-            vector_store_service
+            vector_store_service,
+            db=db
         )
     
     return _attachment_rag_service

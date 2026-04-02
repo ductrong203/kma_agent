@@ -937,7 +937,9 @@ const RagManagement = () => {
                           )}
                         </span>
                         <FiFolder />
-                        {folder.displayName} ({folder.files_count})
+                        <span className="folder-text">
+                          {folder.displayName} ({folder.files_count})
+                        </span>
                       </div>
                       <div className="folder-actions">
                         <button
@@ -1023,8 +1025,10 @@ const RagManagement = () => {
                                 <div className="folder-name">
                                   <span className="subfolder-indent"></span>
                                   <FiFolder />
-                                  {subfolder.displayName} (
-                                  {subfolder.files_count})
+                                  <span className="folder-text">
+                                    {subfolder.displayName} (
+                                    {subfolder.files_count})
+                                  </span>
                                 </div>
                                 <div className="folder-actions">
                                   <button

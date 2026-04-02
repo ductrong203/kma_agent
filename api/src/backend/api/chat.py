@@ -128,12 +128,24 @@ async def get_conversations_of_user(
 
     async for conv in cursor:
         # Count messages for this conversation
+        # Fetch first user message as preview
+        first_message = await mongodb.db.messages.find_one(
+            {"conversation_id": conv["_id"], "is_user": True},
+            sort=[("created_at", 1)]
+        )
+        
+        preview = ""
+        if first_message:
+            # Get full first user message (no truncation)
+            preview = first_message.get("content", "")
+        
         response_data = ConversationResponse(
             _id = str(conv["_id"]),
             user_id = str(conv["user_id"]),
             title = conv["title"],
             created_at = conv["created_at"],
             updated_at = conv["updated_at"],
+            preview = preview  # Include preview
         )
         conversations.append(response_data)
     
@@ -282,17 +294,16 @@ async def get_messages_of_conversation(
             content = msg["content"],
             is_user = msg["is_user"],
             created_at = msg["created_at"],
+            attachments = msg.get("attachments", [])
         )
         messages.append(response_msg)
 
-    print("all messages")
-    print(messages)
-    
     return BaseResponse(
         statusCode=status.HTTP_200_OK,
         message="Messages retrieved successfully",
         data=messages
     )
+
 
 @router.post("/{conversation_id}/messages", response_model=BaseResponse[MessageResponse])
 async def query_ai(
@@ -350,13 +361,13 @@ async def query_ai(
     else:
         content = message.content
 
+    logger.info(f"DEBUG QUERY_AI START - message.attachments received from frontend: type={type(message.attachments)}, value={message.attachments}")
+
     # ==================== NEW: Handle Attachments ====================
     attachment_objects = []
     augmented_content = content
     
     if message.attachments:
-        logger.info(f"Processing {len(message.attachments)} attachments")
-        
         # Get attachment RAG service
         attachment_rag_service = get_attachment_rag_service()
         
@@ -370,7 +381,6 @@ async def query_ai(
         # Augment content with attachment context
         if attachment_context:
             augmented_content = f"{content}\n\n[DOCUMENT CONTEXT]\n{attachment_context}"
-            logger.info(f"Augmented content with {len(attachment_context)} chars of context")
         
         # Prepare attachment objects for DB storage
         for file_id in message.attachments:
@@ -379,16 +389,36 @@ async def query_ai(
                 file_service = FileManagementService(mongodb.db)
                 file_metadata = await file_service.get_file_metadata(file_id)
                 
+                att_obj = {
+                    "file_id": file_id,
+                    "filename": file_metadata.get("original_filename", file_metadata.get("filename", "Unknown")),
+                    "size": file_metadata.get("size", 0),
+                    "mime_type": file_metadata.get("mime_type", "application/octet-stream"),
+                    "status": "ready"
+                }
+                attachment_objects.append(att_obj)
+            except KeyError as e:
+                logger.error(f"KeyError fetching metadata field for {file_id}: {str(e)}", exc_info=True)
+                # Fallback: save with minimal info
                 attachment_objects.append({
                     "file_id": file_id,
-                    "filename": file_metadata["original_filename"],
-                    "size": file_metadata["size"],
-                    "mime_type": file_metadata["mime_type"],
-                    "status": "ready"
+                    "filename": "Unknown",
+                    "size": 0,
+                    "mime_type": "application/octet-stream",
+                    "status": "failed"
                 })
-                logger.info(f"Added attachment: {file_id}")
             except Exception as e:
-                logger.warning(f"Could not load attachment metadata: {file_id}, error: {str(e)}")
+                logger.error(f"❌ Could not load attachment metadata for {file_id}, error: {str(e)}", exc_info=True)
+                # Fallback: save with minimal info
+                attachment_objects.append({
+                    "file_id": file_id,
+                    "filename": "Unknown",
+                    "size": 0,
+                    "mime_type": "application/octet-stream",
+                    "status": "failed"
+                })
+        
+        logger.info(f"DEBUG - Final attachment_objects list to save: {attachment_objects}")
     # ================================================================
 
     # Create the user message
@@ -399,6 +429,8 @@ async def query_ai(
         "created_at": now,
         "attachments": attachment_objects  # NEW: Store attachments
     }
+
+    logger.info(f"DEBUG - new_message being saved to DB: {new_message}")
 
     await mongodb.db.messages.insert_one(new_message)
 
@@ -469,6 +501,35 @@ async def query_ai(
         logger.warning(f"Token limit reached but continuing as request already processed: {token_error}")
     
     logger.info(f"Rate limit updated successfully")
+
+    # Log conversation statistics to dashboard
+    try:
+        # Get message count for this conversation
+        message_count = await mongodb.db.messages.count_documents({"conversation_id": conv_id})
+        
+        # Get username from current_user
+        username = current_user.get("username", "unknown")
+        conversation_title = conversation.get("title", "Untitled Conversation")
+        
+        # Create statistics log
+        stat_data = {
+            "conversation_id": str(conv_id),
+            "user_id": user_id,
+            "username": username,
+            "title": conversation_title,
+            "message_count": message_count,
+            "tokens_used": estimated_tokens,
+            "status": "Thành công",
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        # Insert into conversation_stats collection
+        await mongodb.db.conversation_stats.insert_one(stat_data)
+        logger.info(f"Logged conversation stat: user={username}, tokens={estimated_tokens}, messages={message_count}")
+    except Exception as e:
+        logger.error(f"Failed to log conversation statistics: {e}")
+        # Don't fail the response if logging fails
 
     return BaseResponse(
         statusCode=status.HTTP_201_CREATED,

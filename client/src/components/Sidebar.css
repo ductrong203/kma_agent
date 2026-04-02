@@ -115,12 +115,14 @@
 
 /* Conversations List */
 .conversations-list {
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: calc(100vh - 280px);
   overflow-y: auto;
   padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 100px;
 }
 
 .conversations-list::-webkit-scrollbar {
@@ -221,6 +223,17 @@
 }
 
 /* Sidebar Footer */
+.sidebar-bottom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+  width: 100%;
+  border-top: 1px solid rgba(194, 24, 91, 0.1);
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
 .sidebar-footer {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 12px;
@@ -302,8 +315,15 @@
   border-color: rgba(255, 255, 255, 0.15);
 }
 
-.footer-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.footer-btn.admin-btn {
+  border-color: rgba(194, 24, 91, 0.3);
+  color: #ec4899;
+}
+
+.footer-btn.admin-btn:hover {
+  background: rgba(194, 24, 91, 0.15);
+  border-color: rgba(194, 24, 91, 0.5);
+  color: #ff006e;
 }
 
 .footer-btn.logout-btn:hover {

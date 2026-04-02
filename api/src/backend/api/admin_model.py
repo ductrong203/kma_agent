@@ -271,7 +271,17 @@ async def select_model(
                     detail=f"Ollama model '{model_name}' not found. Available models: {available_models}"
                 )
             
+            # Update runtime model
             model_manager.set_ollama_model(model_name)
+            
+            # Also sync with model_manager cache for consistency
+            model_dict = {
+                "name": model_name,
+                "modelType": ModelType.OLLAMA,
+                "isActive": True,
+                "ollama_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            }
+            model_manager.set_active_model_from_dict(model_dict)
             
         elif model_type == "gemini":
             # Kiểm tra xem model có tồn tại trong Gemini không
@@ -291,7 +301,17 @@ async def select_model(
                     detail="Google API key not configured"
                 )
             
+            # Update runtime model
             model_manager.set_gemini_model(model_name)
+            
+            # Also sync with model_manager cache for consistency
+            model_dict = {
+                "name": model_name,
+                "modelType": ModelType.GEMINI,
+                "isActive": True,
+                "api_key": os.getenv("GOOGLE_API_KEY")
+            }
+            model_manager.set_active_model_from_dict(model_dict)
             
         else:
             raise HTTPException(

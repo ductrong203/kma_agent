@@ -104,6 +104,7 @@ function ChatApp() {
               content: msg.content,
               role: msg.role,
               timestamp: msg.timestamp,
+              attachments: msg.attachments || [], // Include attachments
             }));
             setMessages(formattedMessages);
           }

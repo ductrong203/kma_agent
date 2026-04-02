@@ -10,14 +10,17 @@ import {
   FiX,
   FiUserCheck,
   FiBook,
+  FiFileText,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
 import Login from "../Login";
+import Dashboard from "./Dashboard";
 import UsageStatistics from "./UsageStatistics";
 import ConversationLogs from "./ConversationLogs";
 import UserManagement from "./UserManagement";
 import RateLimiting from "./RateLimiting";
+import FileUploadLimits from "./FileUploadLimits";
 import ModelManagement from "./ModelManagement";
 import RagManagement from "./RagManagement";
 import authService from "../../services/authService";
@@ -28,6 +31,7 @@ const VIEWS = {
   USERS: "users",
   LOGS: "logs",
   RATE_LIMITS: "rate-limits",
+  FILE_UPLOAD_LIMITS: "file-upload-limits",
   MODEL_MANAGEMENT: "models",
   RAG_MANAGEMENT: "rag",
 };
@@ -71,13 +75,15 @@ const AdminDashboard = () => {
   const renderContent = () => {
     switch (activeView) {
       case VIEWS.STATS:
-        return <UsageStatistics />;
+        return <Dashboard />;
       case VIEWS.USERS:
         return <UserManagement />;
       case VIEWS.LOGS:
         return <ConversationLogs />;
       case VIEWS.RATE_LIMITS:
         return <RateLimiting />;
+      case VIEWS.FILE_UPLOAD_LIMITS:
+        return <FileUploadLimits />;
       case VIEWS.MODEL_MANAGEMENT:
         return <ModelManagement />;
       case VIEWS.RAG_MANAGEMENT:
@@ -105,18 +111,22 @@ const AdminDashboard = () => {
       >
         <div className="admin-sidebar-header">
           <img
-            src="/assets/kma-logo.svg"
+            src="/img/kma.png"
             alt="KMA Logo"
             className="admin-logo"
+            onError={(e) => {
+              e.currentTarget.src = "/assets/kma-logo-outline.svg";
+            }}
           />
-          <h2>Quản trị Chatbot</h2>
+          <h2>ACTVN-AGENT</h2>
         </div>
 
         <nav className="admin-nav">
           <ul>
+            {/* Primary stats button */}
             <li>
               <button
-                className={activeView === VIEWS.STATS ? "active" : ""}
+                className={`admin-nav-stats-btn ${activeView === VIEWS.STATS ? "active" : ""}`}
                 onClick={() => {
                   setActiveView(VIEWS.STATS);
                   setIsMobileMenuOpen(false);
@@ -126,6 +136,8 @@ const AdminDashboard = () => {
                 <span>Thống kê sử dụng</span>
               </button>
             </li>
+
+            {/* Other menu items */}
             <li>
               <button
                 className={activeView === VIEWS.USERS ? "active" : ""}
@@ -178,6 +190,20 @@ const AdminDashboard = () => {
             </li>
             <li>
               <button
+                className={
+                  activeView === VIEWS.FILE_UPLOAD_LIMITS ? "active" : ""
+                }
+                onClick={() => {
+                  setActiveView(VIEWS.FILE_UPLOAD_LIMITS);
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <FiFileText />
+                <span>Giới hạn tải file</span>
+              </button>
+            </li>
+            <li>
+              <button
                 className={activeView === VIEWS.RAG_MANAGEMENT ? "active" : ""}
                 onClick={() => {
                   setActiveView(VIEWS.RAG_MANAGEMENT);
@@ -194,26 +220,43 @@ const AdminDashboard = () => {
         <div className="admin-sidebar-footer">
           <div className="admin-user-info">
             <FiUserCheck />
-            <span>{user.name || user.username}</span>
+            <div>
+              <p className="admin-user-name">{user.name || user.username}</p>
+              <p className="admin-user-role">Admin</p>
+            </div>
           </div>
-          <button className="admin-logout-button" onClick={handleLogout}>
-            <FiLogOut />
-            <span>Đăng xuất</span>
-          </button>
         </div>
       </aside>
 
       {/* Main content */}
       <main className="admin-content">
         <header className="admin-content-header">
-          <h1>
-            {activeView === VIEWS.STATS && "Thống kê sử dụng"}
-            {activeView === VIEWS.USERS && "Quản lý người dùng"}
-            {activeView === VIEWS.LOGS && "Lịch sử hội thoại"}
-            {activeView === VIEWS.RATE_LIMITS && "Giới hạn tốc độ"}
-            {activeView === VIEWS.MODEL_MANAGEMENT && "Quản lý mô hình LLM"}
-            {activeView === VIEWS.RAG_MANAGEMENT && "Quản lý dữ liệu RAG"}
-          </h1>
+          <div className="admin-header-container">
+            <div className="admin-header-left">
+              <img
+                src="/img/kma.png"
+                alt="KMA"
+                className="admin-header-logo"
+                onError={(e) => {
+                  e.currentTarget.src = "/assets/kma-logo-outline.svg";
+                }}
+              />
+            </div>
+            <div className="admin-header-right">
+              <div className="admin-header-user">
+                <span className="admin-header-username">
+                  {user.name || user.username}
+                </span>
+                <button
+                  className="admin-header-logout-btn"
+                  onClick={handleLogout}
+                >
+                  <FiLogOut />
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          </div>
         </header>
 
         <div className="admin-content-body">{renderContent()}</div>

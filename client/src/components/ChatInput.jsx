@@ -17,7 +17,7 @@ const ChatInput = ({
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isFolderOpen, setIsFolderOpen] = useState(false);
-  const [attachmentFileIds, setAttachmentFileIds] = useState([]); // NEW: Store file_ids instead of file objects
+  const [attachmentFileIds, setAttachmentFileIds] = useState([]); // Store {id, name} objects
   const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false); // NEW: Control FileUploadPanel
   const recognitionRef = useRef(null);
   const textareaRef = useRef(null);
@@ -26,7 +26,11 @@ const ChatInput = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (message.trim() && !disabled) {
-      onSendMessage(message, selectedFolder, attachmentFileIds);
+      // Extract IDs from file objects for sending to API
+      const fileIds = attachmentFileIds.map((f) =>
+        typeof f === "string" ? f : f.id,
+      );
+      onSendMessage(message, selectedFolder, fileIds);
       setMessage("");
       setAttachmentFileIds([]); // Clear attachments after send
       if (textareaRef.current) {
@@ -95,8 +99,13 @@ const ChatInput = ({
   };
 
   // NEW: Remove attachment by file_id
-  const removeAttachment = (fileId) => {
-    setAttachmentFileIds((prev) => prev.filter((id) => id !== fileId));
+  const removeAttachment = (fileIdOrObj) => {
+    setAttachmentFileIds((prev) =>
+      prev.filter((item) => {
+        const itemId = typeof item === "string" ? item : item.id;
+        return itemId !== fileIdOrObj;
+      }),
+    );
   };
 
   const activeFolderValue = selectedFolder || "all";
@@ -273,22 +282,27 @@ const ChatInput = ({
         {/* Attachments display */}
         {attachmentFileIds.length > 0 && (
           <div className="chat-attachments">
-            {attachmentFileIds.map((fileId) => (
-              <div key={fileId} className="chat-attachment-item">
-                <div className="chat-attachment-info">
-                  <div className="chat-attachment-name">{fileId}</div>
-                  <div className="chat-attachment-status">Đã tải lên</div>
+            {attachmentFileIds.map((file) => {
+              const fileId = typeof file === "string" ? file : file.id;
+              const fileName =
+                typeof file === "string" ? file : file.name || file.id;
+              return (
+                <div key={fileId} className="chat-attachment-item">
+                  <div className="chat-attachment-info">
+                    <div className="chat-attachment-name">{fileName}</div>
+                    <div className="chat-attachment-status">Đã tải lên</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(fileId)}
+                    className="chat-attachment-remove"
+                    title="Xóa"
+                  >
+                    <FiX size={14} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeAttachment(fileId)}
-                  className="chat-attachment-remove"
-                  title="Xóa"
-                >
-                  <FiX size={14} />
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </form>

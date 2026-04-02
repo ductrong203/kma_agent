@@ -34,28 +34,14 @@ class LLMConfig:
         """Create a model instance with specified configuration.
         
         Args:
-            model_name: Name of the model to use
+            model_name: Name of the model to use (deprecated - model selection now via ModelManager)
             callback_manager: Optional callback manager for tracing
             
         Returns:
-            Configured model instance
+            Configured model instance based on admin's active model selection
         """
-        # Sử dụng LLMFactory để tạo model
+        # Use LLMFactory which respects ModelManager's active model selection
         return LLMFactory.create_llm(callback_manager)
-
-        # Get API key from environment
-        rag_model = os.environ.get("RAG_MODEL")
-
-        if model_name is None:
-            if rag_model is not None:
-                model_name = rag_model
-            else:
-                model_name = cls.DEFAULT_RAG_MODEL_NAME
-        
-        return ChatOllama(
-            model=model_name,
-            callback_manager=callback_manager
-        )
     
     @classmethod
     def create_callback_manager(cls, project_name: str = None) -> CallbackManager:
@@ -78,13 +64,25 @@ def get_llm(model_name: str = None, project_name: str = None) -> BaseChatModel:
         project_name: Optional project name for LangSmith
         
     Returns:
-        Configured ChatOllama instance
+        Configured LLM instance based on active model selection
     """
+    import logging
+    import sys
+    logger = logging.getLogger(__name__)
+    
+    logger.critical(f"🚨 GET_LLM CALLED!")
+    print(f"\n🚨🚨🚨 GET_LLM CALLED! 🚨🚨🚨\n", file=sys.stderr)
+    sys.stderr.flush()
+    
     callback_manager = None
     if project_name:
         callback_manager = LLMConfig.create_callback_manager(project_name)
 
-    return LLMConfig.create_rag_llm(model_name, callback_manager)
+    result = LLMConfig.create_rag_llm(model_name, callback_manager)
+    logger.critical(f"🚨 GET_LLM RETURNING: {type(result).__name__}")
+    print(f"\n🚨🚨🚨 GET_LLM RETURNING: {type(result).__name__} 🚨🚨🚨\n", file=sys.stderr)
+    sys.stderr.flush()
+    return result
 
 def get_gemini_llm(model_name: str = None, callback_manager: Optional[CallbackManager] = None) -> BaseChatModel:
     """Get a configured LLM instance for Gemini."""

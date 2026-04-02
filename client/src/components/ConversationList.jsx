@@ -254,7 +254,14 @@ const ConversationList = ({
                         className="sidebar-item-icon"
                       />
                       <div className="sidebar-item-text">
-                        <h3>{conversation.title}</h3>
+                        <h3 title={conversation.preview || conversation.title}>
+                          {conversation.title}
+                        </h3>
+                        {conversation.preview && (
+                          <p className="sidebar-item-preview">
+                            {conversation.preview}
+                          </p>
+                        )}
                       </div>
                     </>
                   )}

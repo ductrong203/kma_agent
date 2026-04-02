@@ -28,7 +28,10 @@ class ModelManager:
     
     def __init__(self):
         if self._initialized:
+            print(f"🔄 ModelManager already initialized, skipping init")
             return
+        
+        print(f"🆕 ModelManager initializing for first time")
         
         # Skip MongoDB - chỉ dùng runtime và environment variables
         self.client = None
@@ -45,39 +48,88 @@ class ModelManager:
         
         self._initialized = True
     
+    def set_active_model_from_dict(self, model_dict: Dict[str, Any]) -> None:
+        """
+        Set active model from API layer after DB update. Called by models.py during activate.
+        
+        Args:
+            model_dict: Model configuration dict from MongoDB
+        """
+        if model_dict:
+            # DEBUG: Log entire model_dict to see structure
+            print(f"🔍 [DEBUG] set_active_model_from_dict received: {model_dict}")
+            
+            # Convert ObjectId to string if needed
+            if "_id" in model_dict:
+                model_dict["id"] = str(model_dict["_id"])
+                del model_dict["_id"]
+            
+            self._active_model = model_dict
+            self._active_model_params = model_dict.get("parameters", {})
+            
+            # CRITICAL: Also set runtime model type from the dict
+            # This ensures subsequent requests use the correct model type
+            raw_model_type = model_dict.get("modelType", "gemini")
+            print(f"🔍 [DEBUG] Raw modelType value: {raw_model_type} (type: {type(raw_model_type)})")
+            
+            # Handle both enum and string values
+            if isinstance(raw_model_type, ModelType):
+                # Already an enum, use directly
+                self._runtime_model_type = raw_model_type
+                print(f"✅ Runtime model type set to: {self._runtime_model_type} (from enum)")
+            else:
+                # Convert string to enum
+                model_type_str = str(raw_model_type).lower()
+                print(f"🔍 [DEBUG] Converted modelType string: {model_type_str}")
+                try:
+                    self._runtime_model_type = ModelType(model_type_str)
+                    print(f"✅ Runtime model type set to: {self._runtime_model_type}")
+                except ValueError as e:
+                    print(f"❌ ValueError: Could not convert '{model_type_str}' to ModelType: {e}")
+                    self._runtime_model_type = ModelType.GEMINI
+                    print(f"⚠️  Defaulting to GEMINI")
+            
+            print(f"✅ Active model: {model_dict.get('name')} | Runtime type: {self._runtime_model_type}")
+        else:
+            self._active_model = None
+            self._active_model_params = None
+            self._runtime_model_type = None
+            print(f"⚠️  set_active_model_from_dict received None")
+    
     def get_active_model(self) -> Dict[str, Any]:
         """
-        Lấy thông tin về mô hình đang hoạt động.
+        Lấy thông tin về mô hình đang hoạt động từ cache hoặc environment.
         
         Returns:
-            Dict[str, Any]: Thông tin của mô hình đang hoạt động, hoặc None nếu không có.
+            Dict[str, Any]: Thông tin của mô hình đang hoạt động.
         """
-        # Kiểm tra cache
+        # Return cached model if available (set by API layer)
         if self._active_model is not None:
             return self._active_model
         
-        # Skip database - chỉ dùng environment variables và runtime overrides
-        model = None
+        # No cache available, use environment defaults
+        default = self._get_default_model()
+        print(f"ℹ️ No cached active model, using environment defaults")
+        return default
+    
+    def _get_default_model(self) -> Dict[str, Any]:
+        """Get default model from environment variables"""
+        model_type = os.environ.get("DEFAULT_MODEL_TYPE", ModelType.GEMINI).lower()
         
-        if model:
-            # Convert ObjectId to string
-            model["id"] = str(model["_id"])
-            del model["_id"]
-            
-            # Cập nhật cache
-            self._active_model = model
-            self._active_model_params = model.get("parameters", {})
-            
-            return model
-        
-        # Nếu không tìm thấy model nào đang active, lấy model mặc định từ env
-        model_type = os.environ.get("DEFAULT_MODEL_TYPE", ModelType.HUGGINGFACE)
+        # Map string to ModelType
+        if model_type == "ollama":
+            model_type_enum = ModelType.OLLAMA
+        elif model_type == "gemini":
+            model_type_enum = ModelType.GEMINI
+        elif model_type == "huggingface":
+            model_type_enum = ModelType.HUGGINGFACE
+        else:
+            model_type_enum = ModelType.GEMINI  # Default to Gemini
         
         default_model = {
             "id": "default",
-            "name": os.environ.get("DEFAULT_MODEL_NAME", "LLaMA 3 (8B)"),
-            "path": os.environ.get("DEFAULT_MODEL_PATH", "NousResearch/Hermes-2-Pro-Llama-3-8B"),
-            "modelType": model_type,
+            "name": os.environ.get("DEFAULT_MODEL_NAME", "Gemini"),
+            "modelType": model_type_enum,
             "isActive": True,
             "parameters": {
                 "temperature": float(os.environ.get("DEFAULT_TEMPERATURE", "0.7")),
@@ -86,23 +138,23 @@ class ModelManager:
                 "max_tokens": int(os.environ.get("DEFAULT_MAX_TOKENS", "2048")),
                 "presence_penalty": float(os.environ.get("DEFAULT_PRESENCE_PENALTY", "0")),
                 "frequency_penalty": float(os.environ.get("DEFAULT_FREQUENCY_PENALTY", "0")),
-                "system_prompt": os.environ.get("DEFAULT_SYSTEM_PROMPT", "Bạn là trợ lý AI của Học viện Kỹ thuật Mật mã.")
             }
         }
         
         # Thêm thông tin đặc thù cho từng loại model
-        if model_type == ModelType.GEMINI:
-            default_model["api_key"] = os.environ.get("GEMINI_API_KEY", "")
-            default_model["gemini_model"] = os.environ.get("DEFAULT_GEMINI_MODEL", "gemini-1.5-pro")
-        elif model_type == ModelType.OLLAMA:
-            default_model["ollama_model"] = os.environ.get("DEFAULT_OLLAMA_MODEL", "llama3")
-            default_model["ollama_url"] = os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
-        elif model_type == ModelType.HUGGINGFACE:
+        if model_type_enum == ModelType.GEMINI:
+            default_model["api_key"] = os.environ.get("GOOGLE_API_KEY", "")
+            default_model["gemini_model"] = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        elif model_type_enum == ModelType.OLLAMA:
+            default_model["ollama_model"] = os.environ.get("OLLAMA_MODEL", "llama3")
+            default_model["ollama_url"] = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        elif model_type_enum == ModelType.HUGGINGFACE:
             default_model["hf_token"] = os.environ.get("HF_TOKEN", "")
         
         self._active_model = default_model
         self._active_model_params = default_model.get("parameters", {})
         
+        print(f"ℹ️ Using default model from env: {default_model.get('name')} ({model_type})")
         return default_model
     
     def get_model_parameter(self, param_name: str, default_value: Any = None) -> Any:
@@ -227,21 +279,9 @@ class ModelManager:
             return active_model.get("path", os.environ.get("DEFAULT_MODEL_PATH", "NousResearch/Hermes-2-Pro-Llama-3-8B"))
         return os.environ.get("DEFAULT_MODEL_PATH", "NousResearch/Hermes-2-Pro-Llama-3-8B")
     
-    def get_model_type(self) -> str:
-        """
-        Lấy loại của mô hình đang hoạt động.
-        
-        Returns:
-            str: Loại mô hình (huggingface, ollama, gemini, other)
-        """
-        active_model = self.get_active_model()
-        if active_model:
-            return active_model.get("modelType", ModelType.HUGGINGFACE)
-        return os.environ.get("DEFAULT_MODEL_TYPE", ModelType.HUGGINGFACE)
-    
     def get_gemini_info(self) -> Dict[str, Any]:
         """
-        Lấy thông tin cấu hình cho Gemini.
+        Lấy thông tin cấu hình cho Gemini từ active model hoặc environment.
         
         Returns:
             Dict[str, Any]: Thông tin cấu hình Gemini.
@@ -249,17 +289,17 @@ class ModelManager:
         active_model = self.get_active_model()
         if active_model and active_model.get("modelType") == ModelType.GEMINI:
             return {
-                "api_key": active_model.get("api_key", os.environ.get("GEMINI_API_KEY", "")),
-                "model": active_model.get("gemini_model", os.environ.get("DEFAULT_GEMINI_MODEL", "gemini-1.5-pro"))
+                "api_key": active_model.get("api_key", os.environ.get("GOOGLE_API_KEY", "")),
+                "model": active_model.get("name") or active_model.get("gemini_model", os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"))
             }
         return {
-            "api_key": os.environ.get("GEMINI_API_KEY", ""),
-            "model": os.environ.get("DEFAULT_GEMINI_MODEL", "gemini-1.5-pro")
+            "api_key": os.environ.get("GOOGLE_API_KEY", ""),
+            "model": os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
         }
     
     def get_ollama_info(self) -> Dict[str, Any]:
         """
-        Lấy thông tin cấu hình cho Ollama.
+        Lấy thông tin cấu hình cho Ollama từ active model hoặc environment.
         
         Returns:
             Dict[str, Any]: Thông tin cấu hình Ollama.
@@ -267,12 +307,12 @@ class ModelManager:
         active_model = self.get_active_model()
         if active_model and active_model.get("modelType") == ModelType.OLLAMA:
             return {
-                "model": active_model.get("ollama_model", os.environ.get("DEFAULT_OLLAMA_MODEL", "llama3")),
-                "url": active_model.get("ollama_url", os.environ.get("OLLAMA_API_URL", "http://localhost:11434"))
+                "model": active_model.get("name") or active_model.get("ollama_model", os.environ.get("OLLAMA_MODEL", "llama3")),
+                "url": active_model.get("ollama_url", os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"))
             }
         return {
-            "model": os.environ.get("DEFAULT_OLLAMA_MODEL", "llama3"),
-            "url": os.environ.get("OLLAMA_API_URL", "http://localhost:11434")
+            "model": os.environ.get("OLLAMA_MODEL", "llama3"),
+            "url": os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
         }
     
     def get_huggingface_info(self) -> Dict[str, Any]:
@@ -357,17 +397,47 @@ class ModelManager:
         Returns:
             ModelType: Loại model đang hoạt động
         """
-        # Ưu tiên runtime override
+        print(f"🔍 [get_model_type] _runtime_model_type: {self._runtime_model_type}")
+        
+        # Ưu tiên runtime override (for single worker scenarios)
         if self._runtime_model_type:
+            print(f"✅ [get_model_type] Returning runtime override: {self._runtime_model_type}")
             return self._runtime_model_type
+        
+        print(f"⚠️ [get_model_type] No runtime override, checking env var")
         
         # Fallback về environment variable
         if os.getenv("ACTIVE_MODEL_TYPE"):
-            return ModelType(os.getenv("ACTIVE_MODEL_TYPE"))
+            try:
+                env_model = ModelType(os.getenv("ACTIVE_MODEL_TYPE").lower())
+                print(f"✅ [get_model_type] Returning from env: {env_model}")
+                return env_model
+            except ValueError:
+                pass
         
-        # Fallback về database hoặc default
+        print(f"⚠️ [get_model_type] No env var, checking cached active_model")
+        
+        # Fallback về cached active model
         active_model = self.get_active_model()
-        return ModelType(active_model.get("modelType", ModelType.GEMINI))
+        if active_model:
+            model_type_val = active_model.get("modelType", ModelType.GEMINI)
+            print(f"🔍 [get_model_type] active_model modelType: {model_type_val}")
+            # Handle both enum and string values
+            if isinstance(model_type_val, ModelType):
+                print(f"✅ [get_model_type] Returning from cache (enum): {model_type_val}")
+                return model_type_val
+            elif isinstance(model_type_val, str):
+                try:
+                    result = ModelType(model_type_val.lower())
+                    print(f"✅ [get_model_type] Returning from cache (string): {result}")
+                    return result
+                except ValueError:
+                    print(f"❌ [get_model_type] Could not convert: {model_type_val}")
+                    return ModelType.GEMINI
+        
+        # Default to GEMINI
+        print(f"❌ [get_model_type] Defaulting to GEMINI")
+        return ModelType.GEMINI
     
     def get_ollama_info(self) -> Dict[str, Any]:
         """

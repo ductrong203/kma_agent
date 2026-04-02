@@ -294,6 +294,7 @@ const chatService = {
             title: conv.title,
             createdAt: conv.created_at,
             updatedAt: conv.updated_at,
+            preview: conv.preview || "", // Include preview text
           })),
         };
       } else {
@@ -324,6 +325,7 @@ const chatService = {
             content: msg.content,
             isUser: msg.is_user,
             createdAt: msg.created_at,
+            attachments: msg.attachments || [],
           })),
         };
       } else {

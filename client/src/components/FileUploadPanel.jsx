@@ -5,6 +5,7 @@ import {
   HiOutlineArrowUpTray,
   HiOutlineDocument,
   HiOutlineTrash,
+  HiOutlineEye,
 } from "react-icons/hi2";
 import { MdOutlineAutorenew } from "react-icons/md";
 
@@ -19,6 +20,9 @@ const FileUploadPanel = ({
   const [serverFiles, setServerFiles] = useState([]); // Files from server
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingServerFiles, setIsLoadingServerFiles] = useState(false);
+  const [showContentModal, setShowContentModal] = useState(false);
+  const [fileContent, setFileContent] = useState("");
+  const [selectedFileName, setSelectedFileName] = useState("");
   const fileInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState("upload"); // "upload" or "existing"
 
@@ -184,6 +188,20 @@ const FileUploadPanel = ({
   };
 
   const handleRemoveFile = async (fileId) => {
+    // Get file name for confirmation dialog
+    const file = serverFiles.find((f) => f.file_id === fileId);
+    const fileName = file?.filename || "Unknown file";
+
+    // Ask for confirmation before deleting
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa file này không?\n\n📄 ${fileName}\n\n(Hành động này không thể được hoàn tác)`,
+    );
+
+    if (!confirmed) {
+      console.log(`❌ Delete cancelled for file: ${fileId}`);
+      return;
+    }
+
     try {
       const token = localStorage.getItem("accessToken");
       const headers = {
@@ -212,30 +230,75 @@ const FileUploadPanel = ({
       console.log(`✅ File deleted: ${fileId}`);
     } catch (error) {
       console.error("Error deleting file:", error);
-      alert("Error deleting file: " + error.message);
+      alert("Lỗi xóa file: " + error.message);
+    }
+  };
+
+  const handleViewContent = async (fileId, fileName) => {
+    setSelectedFileName(fileName);
+    setFileContent("Đang tải nội dung...");
+    setShowContentModal(true);
+
+    try {
+      const token = localStorage.getItem("accessToken");
+      const headers = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`/api/files/${fileId}/content`, {
+        method: "GET",
+        headers,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFileContent(data.data.content || "Không có nội dung");
+        } else {
+          setFileContent(data.message || "Không thể lấy nội dung");
+        }
+      } else if (response.status === 404) {
+        setFileContent(
+          "⚠️ File chưa được xử lý hoặc nội dung không có sẵn. Vui lòng đợi file hoàn tất xử lý.",
+        );
+      } else {
+        setFileContent("❌ Lỗi tải nội dung");
+      }
+    } catch (error) {
+      console.error("Error loading file content:", error);
+      setFileContent("❌ Lỗi: " + error.message);
     }
   };
 
   const handleSelectFiles = () => {
-    let selectedFileIds = [];
+    let selectedFiles = [];
 
     // Get selected files from active tab
     if (activeTab === "upload") {
-      selectedFileIds = uploadedFiles
+      selectedFiles = uploadedFiles
         .filter((f) => f.selected)
-        .map((f) => f.file_id);
+        .map((f) => ({
+          id: f.file_id,
+          name: f.filename || f.file_name || f.name || f.file_id,
+        }));
     } else {
-      selectedFileIds = serverFiles
+      selectedFiles = serverFiles
         .filter((f) => f.selected)
-        .map((f) => f.file_id);
+        .map((f) => ({
+          id: f.file_id,
+          name: f.filename || f.file_name || f.name || f.file_id,
+        }));
     }
 
-    if (selectedFileIds.length === 0) {
+    if (selectedFiles.length === 0) {
       alert("Please select at least one file");
       return;
     }
 
-    onFilesSelected(selectedFileIds);
+    onFilesSelected(selectedFiles);
     onClose();
   };
 
@@ -404,13 +467,24 @@ const FileUploadPanel = ({
                             </div>
                           </div>
                         </div>
-                        <button
-                          className="file-delete-btn"
-                          onClick={() => handleRemoveFile(file.file_id)}
-                          title="Delete file"
-                        >
-                          <HiOutlineTrash size={18} />
-                        </button>
+                        <div className="file-actions">
+                          <button
+                            className="file-view-btn"
+                            onClick={() =>
+                              handleViewContent(file.file_id, file.filename)
+                            }
+                            title="View content"
+                          >
+                            <HiOutlineEye size={18} />
+                          </button>
+                          <button
+                            className="file-delete-btn"
+                            onClick={() => handleRemoveFile(file.file_id)}
+                            title="Delete file"
+                          >
+                            <HiOutlineTrash size={18} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -451,6 +525,49 @@ const FileUploadPanel = ({
               })`}
           </button>
         </div>
+
+        {/* Content Viewer Modal */}
+        {showContentModal && (
+          <div
+            className="file-content-overlay"
+            onClick={() => setShowContentModal(false)}
+          >
+            <div
+              className="file-content-viewer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="viewer-header">
+                <h3>{selectedFileName}</h3>
+                <button
+                  onClick={() => setShowContentModal(false)}
+                  className="close-btn"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="viewer-content">
+                <pre>{fileContent}</pre>
+              </div>
+              <div className="viewer-footer">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(fileContent);
+                    alert("✅ Nội dung đã được sao chép");
+                  }}
+                  className="copy-btn"
+                >
+                  📋 Sao chép
+                </button>
+                <button
+                  onClick={() => setShowContentModal(false)}
+                  className="close-viewer-btn"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

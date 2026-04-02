@@ -249,17 +249,22 @@ const MessageBubble = ({ message }) => {
           {/* Attachments */}
           {message.attachments && message.attachments.length > 0 && (
             <div className="message-attachments">
-              {message.attachments.map((attachment, idx) => (
-                <div key={idx} className="attachment-item">
-                  <div className="attachment-icon">📎</div>
-                  <div className="attachment-info">
-                    <div className="attachment-name">{attachment.name}</div>
-                    <div className="attachment-size">
-                      {(attachment.size / 1024).toFixed(1)} KB
+              {message.attachments.map((attachment, idx) => {
+                const fileName =
+                  attachment.filename || attachment.name || "File";
+                const fileSize = attachment.size
+                  ? `${(attachment.size / 1024).toFixed(1)} KB`
+                  : "N/A";
+                return (
+                  <div key={idx} className="attachment-item">
+                    <div className="attachment-icon">📎</div>
+                    <div className="attachment-info">
+                      <div className="attachment-name">{fileName}</div>
+                      <div className="attachment-size">{fileSize}</div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

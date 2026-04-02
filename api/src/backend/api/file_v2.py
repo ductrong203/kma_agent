@@ -22,6 +22,7 @@ from ..db.mongodb import mongodb
 from ..services.file_service import FileManagementService
 from ..services.vector_store_service import get_vector_store_service
 from ..services.attachment_rag_service import get_attachment_rag_service
+from .file_upload_limit import check_file_upload_limit, update_file_upload_stats
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -136,9 +137,11 @@ async def upload_file(
         
         if current_user:
             user_id = current_user.get("sub") or current_user.get("user_id")
+            username = current_user.get("username", "unknown")
             logger.info(f"✅ Got user_id from token: {user_id}")
         else:
             user_id = "anonymous"
+            username = "anonymous"
             logger.info(f"⚪ No authenticated user, using anonymous")
         
         if not user_id:
@@ -155,6 +158,24 @@ async def upload_file(
                 status_code=413,
                 detail=f"File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f} MB"
             )
+        
+        # Convert file size to MB for limit checking
+        file_size_mb = len(file_content) / (1024 * 1024)
+        
+        # Check file upload limits (only for authenticated users)
+        if user_id != "anonymous":
+            allowed, error_msg = await check_file_upload_limit(
+                user_id=user_id,
+                username=username,
+                file_size_mb=int(file_size_mb),
+                conversation_id=conversation_id
+            )
+            if not allowed:
+                logger.warning(f"⛔ File upload limit exceeded for user {username}: {error_msg}")
+                raise HTTPException(
+                    status_code=429,  # Too Many Requests
+                    detail=error_msg
+                )
         
         # Validate MIME type
         if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
@@ -173,6 +194,10 @@ async def upload_file(
         )
         file_id = metadata_result["file_id"]
         logger.info(f"✅ File metadata saved: {file_id}")
+        
+        # Update file upload stats (only for authenticated users)
+        if user_id != "anonymous":
+            await update_file_upload_stats(user_id, int(file_size_mb))
         
         # Step 2: Process file (extract text, embed, store in Milvus)
         # Process file asynchronously in background to avoid timeout
@@ -278,6 +303,10 @@ async def delete_file(
     
     except HTTPException:
         raise
+    except ValueError as ve:
+        # File not found error from get_file_metadata
+        logger.warning(f"⚠️ File not found during delete: {str(ve)}")
+        raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
         logger.error(f"❌ Error deleting file: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
@@ -414,3 +443,113 @@ async def search_attachments(
     except Exception as e:
         logger.error(f"Error searching files: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error searching files: {str(e)}")
+
+
+@router.get("/{file_id}/content", response_model=BaseResponse[Dict])
+async def get_file_content(
+    file_id: str,
+    current_user: dict = Depends(get_optional_user)
+):
+    """
+    Retrieve full file content from Milvus vectors
+    
+    Reconstructs the complete document by fetching all chunks with the given file_id
+    from Milvus and concatenating them in order.
+    
+    Args:
+        file_id: File ID
+        current_user: Authenticated user or None for anonymous
+        
+    Returns:
+        File content with metadata
+    """
+    try:
+        # Get user_id from authenticated user or use "anonymous"
+        if current_user:
+            user_id = current_user.get("sub") or current_user.get("user_id")
+        else:
+            user_id = "anonymous"
+        
+        if not user_id:
+            user_id = "anonymous"
+        
+        logger.info(f"📄 Retrieving content for file: {file_id}, User: {user_id}")
+        
+        # Get file metadata to verify ownership and get original filename
+        try:
+            metadata = await get_file_service().get_file_metadata(file_id)
+        except Exception as e:
+            logger.error(f"❌ File metadata not found: {file_id}")
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Verify ownership (if authenticated)
+        if current_user and metadata.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Access denied - you don't own this file")
+        
+        # Retrieve all chunks from Milvus for this file
+        logger.info(f"  ↳ Fetching chunks from Milvus for file: {file_id}")
+        
+        try:
+            vector_store = get_vector_store_svc()
+            
+            # Get all chunks associated with this file_id using the built-in method
+            chunks = await vector_store.get_file_embeddings(file_id)
+            
+            if not chunks:
+                logger.warning(f"⚠️ No chunks found for file: {file_id}")
+            
+            logger.info(f"✅ Retrieved {len(chunks) if chunks else 0} chunks from Milvus")
+            
+            # Sort chunks by chunk_index if available and concatenate them
+            if isinstance(chunks, list) and len(chunks) > 0:
+                # Sort by 'chunk_index' if available
+                try:
+                    chunks_sorted = sorted(
+                        chunks,
+                        key=lambda x: x.get("chunk_index", 0)
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not sort chunks: {str(e)}")
+                    chunks_sorted = chunks
+                
+                # Concatenate content from all chunks - extract 'text' field
+                content_parts = []
+                for chunk in chunks_sorted:
+                    if isinstance(chunk, dict):
+                        # Extract text content - Milvus returns 'text' field
+                        text = chunk.get("text", "")
+                    else:
+                        text = str(chunk)
+                    
+                    if text and text.strip():
+                        content_parts.append(text.strip())
+                
+                full_content = "\n\n".join(content_parts)
+            else:
+                full_content = ""
+            
+            logger.info(f"✅ Content retrieved: {len(full_content)} characters from {len(chunks) if chunks else 0} chunks")
+            
+            return BaseResponse(
+                success=True,
+                data={
+                    "file_id": file_id,
+                    "filename": metadata.get("original_filename", metadata.get("filename", "Unknown")),
+                    "content": full_content,
+                    "size": metadata.get("size", 0),
+                    "mime_type": metadata.get("mime_type", "application/octet-stream"),
+                    "chunk_count": len(chunks) if chunks else 0,
+                    "created_at": metadata.get("created_at", ""),
+                },
+                message=f"Content retrieved successfully ({len(chunks) if chunks else 0} chunks)"
+            )
+        
+        except Exception as e:
+            logger.error(f"❌ Error retrieving file content: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error retrieving file content: {str(e)}")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error retrieving file content: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error retrieving file content: {str(e)}")

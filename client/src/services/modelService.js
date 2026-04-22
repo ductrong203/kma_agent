@@ -41,7 +41,7 @@ const modelService = {
   activateModel: async (modelId) => {
     try {
       const response = await httpClient.post(
-        API_ENDPOINTS.MODELS.ACTIVATE(modelId)
+        API_ENDPOINTS.MODELS.ACTIVATE(modelId),
       );
       return response;
     } catch (error) {
@@ -60,7 +60,7 @@ const modelService = {
     try {
       const response = await httpClient.put(
         API_ENDPOINTS.MODELS.UPDATE_PARAMS(modelId),
-        params
+        params,
       );
       return response;
     } catch (error) {
@@ -78,7 +78,7 @@ const modelService = {
     try {
       const response = await httpClient.post(
         API_ENDPOINTS.MODELS.UPLOAD,
-        modelData
+        modelData,
       );
       return response;
     } catch (error) {
@@ -102,13 +102,31 @@ const modelService = {
   },
 
   /**
+   * Thêm cấu hình model tuỳ chỉnh (Admin)
+   * @param {string} modelType - Loại model (ollama hoặc gemini)
+   * @param {string} modelName - Tên model
+   */
+  addCustomModel: async (modelType, modelName) => {
+    try {
+      const response = await httpClient.post("/api/admin/models/custom", {
+        model_type: modelType,
+        model_name: modelName,
+      });
+      return response;
+    } catch (error) {
+      console.error("Error adding custom model:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Lấy model hiện tại (Admin)
    * @returns {Promise<Object>} Model hiện tại
    */
   getCurrentModel: async () => {
     try {
       const response = await httpClient.get(
-        API_ENDPOINTS.ADMIN_GET_CURRENT_MODEL
+        API_ENDPOINTS.ADMIN_GET_CURRENT_MODEL,
       );
       return response;
     } catch (error) {
@@ -146,7 +164,7 @@ const modelService = {
   testModel: async (
     modelType,
     modelName,
-    testMessage = "Hello, how are you?"
+    testMessage = "Hello, how are you?",
   ) => {
     try {
       const response = await httpClient.post(API_ENDPOINTS.ADMIN_TEST_MODEL, {

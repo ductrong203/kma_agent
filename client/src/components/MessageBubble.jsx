@@ -133,6 +133,130 @@ const MessageBubble = ({ message }) => {
     }
   };
 
+  // Helper to split message text by <think> tags
+  const renderMessageContent = (text) => {
+    if (isUser) return <p>{text}</p>;
+
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/gi;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = thinkRegex.exec(text)) !== null) {
+      const beforeStr = text.substring(lastIndex, match.index);
+      if (beforeStr) {
+        parts.push({ type: "text", content: beforeStr });
+      }
+
+      parts.push({ type: "think", content: match[1] });
+      lastIndex = thinkRegex.lastIndex;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push({ type: "text", content: text.substring(lastIndex) });
+    }
+
+    if (parts.length === 0) {
+      parts.push({ type: "text", content: text });
+    }
+
+    const commonComponents = {
+      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+      ul: ({ children }) => (
+        <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>
+      ),
+      ol: ({ children }) => (
+        <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>
+      ),
+      li: ({ children }) => <li className="text-sm">{children}</li>,
+      strong: ({ children }) => (
+        <strong className="font-semibold">{children}</strong>
+      ),
+      em: ({ children }) => <em className="italic">{children}</em>,
+      h1: ({ children }) => (
+        <h1 className="text-base font-bold mb-2 mt-2">{children}</h1>
+      ),
+      h2: ({ children }) => (
+        <h2 className="text-sm font-bold mb-2 mt-2">{children}</h2>
+      ),
+      h3: ({ children }) => (
+        <h3 className="text-sm font-semibold mb-1 mt-1">{children}</h3>
+      ),
+      code: ({ children }) => (
+        <code className="bg-black/10 px-2 py-1 rounded text-sm font-mono">
+          {children}
+        </code>
+      ),
+      pre: ({ children }) => (
+        <pre className="bg-black/5 p-3 rounded-lg overflow-x-auto mb-2 text-xs">
+          {children}
+        </pre>
+      ),
+      blockquote: ({ children }) => (
+        <blockquote className="border-l-4 border-current pl-4 my-2 opacity-75">
+          {children}
+        </blockquote>
+      ),
+      table: ({ children }) => (
+        <table className="markdown-table message-content-table">
+          {children}
+        </table>
+      ),
+      thead: ({ children }) => <thead>{children}</thead>,
+      tbody: ({ children }) => <tbody>{children}</tbody>,
+      tr: ({ children }) => <tr>{children}</tr>,
+      th: ({ children }) => <th>{children}</th>,
+      td: ({ children }) => <td>{children}</td>,
+      a: ({ node, children, ...props }) => (
+        <a
+          {...props}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:opacity-80"
+          aria-label={typeof children === "string" ? children : "Link"}
+        >
+          {children}
+        </a>
+      ),
+    };
+
+    return parts.map((part, index) => {
+      if (part.type === "think") {
+        return (
+          <details
+            key={index}
+            className="think-block my-2 border border-gray-200 rounded bg-white"
+          >
+            <summary className="cursor-pointer bg-gray-50 p-2 text-xs text-gray-500 font-semibold hover:bg-gray-100 transition-colors select-none">
+              💭 Quá trình suy nghĩ...
+            </summary>
+            <div className="p-3 text-sm text-gray-600 bg-white border-t border-gray-200 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                className="prose prose-sm max-w-none opacity-80"
+                components={commonComponents}
+              >
+                {part.content}
+              </ReactMarkdown>
+            </div>
+          </details>
+        );
+      } else {
+        return (
+          <ReactMarkdown
+            key={index}
+            remarkPlugins={[remarkGfm]}
+            className="prose prose-sm max-w-none"
+            components={commonComponents}
+          >
+            {part.content}
+          </ReactMarkdown>
+        );
+      }
+    });
+  };
+
   return (
     <div
       className={`message-container ${isUser ? "user-message" : "bot-message"}`}
@@ -158,91 +282,7 @@ const MessageBubble = ({ message }) => {
             <RateLimitMessage message={messageText} />
           ) : (
             <div className="message-content">
-              {isUser ? (
-                <p>{messageText}</p>
-              ) : (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  className="prose prose-sm max-w-none"
-                  components={{
-                    p: ({ children }) => (
-                      <p className="mb-2 last:mb-0">{children}</p>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="list-disc list-inside mb-2 space-y-1">
-                        {children}
-                      </ul>
-                    ),
-                    ol: ({ children }) => (
-                      <ol className="list-decimal list-inside mb-2 space-y-1">
-                        {children}
-                      </ol>
-                    ),
-                    li: ({ children }) => (
-                      <li className="text-sm">{children}</li>
-                    ),
-                    strong: ({ children }) => (
-                      <strong className="font-semibold">{children}</strong>
-                    ),
-                    em: ({ children }) => (
-                      <em className="italic">{children}</em>
-                    ),
-                    h1: ({ children }) => (
-                      <h1 className="text-base font-bold mb-2 mt-2">
-                        {children}
-                      </h1>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 className="text-sm font-bold mb-2 mt-2">
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 className="text-sm font-semibold mb-1 mt-1">
-                        {children}
-                      </h3>
-                    ),
-                    code: ({ children }) => (
-                      <code className="bg-black/10 px-2 py-1 rounded text-sm font-mono">
-                        {children}
-                      </code>
-                    ),
-                    pre: ({ children }) => (
-                      <pre className="bg-black/5 p-3 rounded-lg overflow-x-auto mb-2 text-xs">
-                        {children}
-                      </pre>
-                    ),
-                    blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-current pl-4 my-2 opacity-75">
-                        {children}
-                      </blockquote>
-                    ),
-                    table: ({ children }) => (
-                      <table className="markdown-table">{children}</table>
-                    ),
-                    thead: ({ children }) => <thead>{children}</thead>,
-                    tbody: ({ children }) => <tbody>{children}</tbody>,
-                    tr: ({ children }) => <tr>{children}</tr>,
-                    th: ({ children }) => <th>{children}</th>,
-                    td: ({ children }) => <td>{children}</td>,
-                    a: ({ node, children, ...props }) => (
-                      <a
-                        {...props}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:opacity-80"
-                        aria-label={
-                          typeof children === "string" ? children : "Link"
-                        }
-                      >
-                        {children}
-                      </a>
-                    ),
-                  }}
-                >
-                  {processedMessageText}
-                </ReactMarkdown>
-              )}
+              {renderMessageContent(processedMessageText)}
             </div>
           )}
 

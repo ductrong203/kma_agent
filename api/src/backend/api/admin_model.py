@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ...llm.model_manager import model_manager, ModelType
 from ...llm.llm_factory import LLMFactory
-from ..auth.dependencies import get_current_admin_user
+from ..auth.dependencies import get_current_admin_user, require_auth
 from ..models.responses import BaseResponse
 
 router = APIRouter(tags=["Admin Model Management"])
@@ -92,6 +92,49 @@ async def get_ollama_models() -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"❌ Error fetching Ollama models: {e}")
         return []
+
+import json
+
+def get_custom_models() -> Dict[str, List[Dict[str, Any]]]:
+    """Lấy danh sách các models tùy chỉnh được định cấu hình bằng JSON."""
+    custom_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'custom_models.json')
+    if os.path.exists(custom_file):
+        try:
+            with open(custom_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"❌ Error loading custom models: {e}")
+    return {"ollama": [], "gemini": []}
+
+def save_custom_model(model_type: str, model_name: str) -> None:
+    """Lưu model tùy chỉnh vào file JSON."""
+    custom_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'custom_models.json')
+    custom_models = get_custom_models()
+    
+    if model_type not in custom_models:
+        custom_models[model_type] = []
+        
+    # Check if model already exists
+    existing = [m for m in custom_models[model_type] if m.get("name") == model_name]
+    if not existing:
+        if model_type == "ollama":
+            custom_models[model_type].append({
+                "name": model_name,
+                "size": "custom",
+                "modified": "custom",
+                "digest": "custom",
+                "details": {"family": "custom"}
+            })
+        else: # gemini
+            custom_models[model_type].append({
+                "name": model_name,
+                "display_name": f"{model_name} (Custom)",
+                "description": "Custom configured model",
+                "supported_generation_methods": ["generateContent", "streamGenerateContent"]
+            })
+        
+        with open(custom_file, 'w', encoding='utf-8') as f:
+            json.dump(custom_models, f, ensure_ascii=False, indent=4)
 
 def get_gemini_models() -> List[Dict[str, Any]]:
     """
@@ -180,7 +223,7 @@ async def test_model_connection(model_type: str, model_name: str, test_message: 
 
 @router.get("/available", response_model=AvailableModelsResponse, dependencies=[Depends(security)])
 async def get_available_models(
-    admin_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_auth)
 ):
     """
     Lấy danh sách tất cả models có sẵn từ Ollama và Gemini.
@@ -189,9 +232,22 @@ async def get_available_models(
         AvailableModelsResponse: Danh sách models và model đang hoạt động
     """
     try:
-        # Lấy models từ Ollama và Gemini
+        # Lấy models từ Ollama và Gemini và kết hợp với models custom
         ollama_models = await get_ollama_models()
         gemini_models = get_gemini_models()
+        
+        custom_models = get_custom_models()
+        if "ollama" in custom_models:
+            existing_ollama_names = [m["name"] for m in ollama_models]
+            for cm in custom_models["ollama"]:
+                if cm["name"] not in existing_ollama_names:
+                    ollama_models.append(cm)
+                    
+        if "gemini" in custom_models:
+            existing_gemini_names = [m["name"] for m in gemini_models]
+            for cm in custom_models["gemini"]:
+                if cm["name"] not in existing_gemini_names:
+                    gemini_models.append(cm)
         
         # Lấy thông tin model đang hoạt động
         current_type = model_manager.get_model_type()
@@ -242,6 +298,37 @@ async def get_available_models(
             detail=f"Failed to fetch available models: {str(e)}"
         )
 
+@router.post("/custom", dependencies=[Depends(security)])
+async def add_custom_model(
+    request: ModelSelectionRequest,
+    admin_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Thêm và cấu hình model tuỳ chỉnh để có thể chọn sử dụng.
+    """
+    try:
+        model_type = request.model_type.lower()
+        model_name = request.model_name.strip()
+        
+        if not model_name:
+            raise HTTPException(status_code=400, detail="Tên model không được để trống")
+            
+        if model_type not in ["ollama", "gemini"]:
+            raise HTTPException(status_code=400, detail="Loại model phải là 'ollama' hoặc 'gemini'")
+            
+        # Lưu model
+        save_custom_model(model_type, model_name)
+        
+        return {
+            "success": True,
+            "message": f"Đã lưu model {model_name} dưới dạng {model_type} thành công."
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Lỗi thêm cấu hình model: {str(e)}"
+        )
+
 @router.post("/select", dependencies=[Depends(security)])
 async def select_model(
     request: ModelSelectionRequest,
@@ -263,7 +350,8 @@ async def select_model(
         if model_type == "ollama":
             # Kiểm tra xem model có tồn tại trong Ollama không
             ollama_models = await get_ollama_models()
-            available_models = [m["name"] for m in ollama_models]
+            custom_models = get_custom_models()
+            available_models = [m["name"] for m in ollama_models] + [m["name"] for m in custom_models.get("ollama", [])]
             
             if model_name not in available_models:
                 raise HTTPException(
@@ -286,7 +374,8 @@ async def select_model(
         elif model_type == "gemini":
             # Kiểm tra xem model có tồn tại trong Gemini không
             gemini_models = get_gemini_models()
-            available_models = [m["name"] for m in gemini_models]
+            custom_models = get_custom_models()
+            available_models = [m["name"] for m in gemini_models] + [m["name"] for m in custom_models.get("gemini", [])]
             
             if model_name not in available_models:
                 raise HTTPException(
@@ -339,7 +428,7 @@ async def select_model(
 
 @router.get("/current", dependencies=[Depends(security)])
 async def get_current_model(
-    admin_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_auth)
 ):
     """
     Lấy thông tin về model đang được sử dụng.

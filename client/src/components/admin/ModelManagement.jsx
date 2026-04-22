@@ -23,6 +23,10 @@ const ModelManagement = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
+  // Custom Model config
+  const [customModelType, setCustomModelType] = useState("gemini");
+  const [customModelName, setCustomModelName] = useState("");
+
   useEffect(() => {
     fetchModels();
   }, []);
@@ -32,7 +36,7 @@ const ModelManagement = () => {
     setError(null);
     try {
       const [availableModelsResponse, currentModelResponse] = await Promise.all(
-        [modelService.getAvailableModels(), modelService.getCurrentModel()]
+        [modelService.getAvailableModels(), modelService.getCurrentModel()],
       );
 
       console.log("Available models response:", availableModelsResponse);
@@ -71,7 +75,7 @@ const ModelManagement = () => {
             max_tokens: 8192, // default for Gemini
             supports_streaming:
               model.supported_generation_methods?.includes(
-                "streamGenerateContent"
+                "streamGenerateContent",
               ) || true,
           }));
           modelsList = [...modelsList, ...geminiModels];
@@ -167,7 +171,7 @@ const ModelManagement = () => {
       const response = await modelService.testModel(
         modelType,
         modelName,
-        testPrompt
+        testPrompt,
       );
       if (response && response.data) {
         setTestResult({
@@ -204,6 +208,45 @@ const ModelManagement = () => {
     } catch (error) {
       console.error("Error resetting model:", error);
       setError("Không thể reset model. Vui lòng thử lại.");
+    }
+  };
+
+  const handleAddCustomModel = async (e) => {
+    e.preventDefault();
+    if (!customModelName.trim()) {
+      setError("Vui lòng nhập tên model!");
+      return;
+    }
+
+    setError(null);
+    setSuccessMessage(null);
+    setLoading(true);
+
+    try {
+      const response = await modelService.addCustomModel(
+        customModelType,
+        customModelName.trim(),
+      );
+      const data = response.data || response;
+
+      if (data && data.success) {
+        setSuccessMessage(
+          data.message ||
+            `Đã thêm model custom "${customModelName}" thành công!`,
+        );
+        setCustomModelName("");
+        await fetchModels();
+      } else {
+        throw new Error(
+          data?.detail || data?.message || "Không thể thêm model.",
+        );
+      }
+    } catch (error) {
+      console.error("Error adding custom model:", error);
+      setError(error.message || "Đã xảy ra lỗi khi thêm model.");
+    } finally {
+      setLoading(false);
+      setTimeout(() => setSuccessMessage(null), 4000);
     }
   };
 
@@ -302,6 +345,79 @@ const ModelManagement = () => {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Add Custom Model Section */}
+      <div
+        className="custom-model-section"
+        style={{
+          marginBottom: "2rem",
+          padding: "1.5rem",
+          backgroundColor: "#f8f9fa",
+          borderRadius: "12px",
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        <h3 style={{ marginBottom: "1rem", color: "#1e293b" }}>
+          Thêm cấu hình Model tuỳ chỉnh
+        </h3>
+        <p
+          style={{
+            fontSize: "0.875rem",
+            color: "#64748b",
+            marginBottom: "1rem",
+          }}
+        >
+          Nhập tên mô hình (ví dụ: gemini-1.5-flash hoặc google/gemma-4-31b-it)
+          để thêm vào danh sách, sau đó bạn có thể chọn để sử dụng. Các mô hình
+          này sẽ được lưu ở phía hệ thống.
+        </p>
+        <form
+          onSubmit={handleAddCustomModel}
+          style={{ display: "flex", gap: "1rem", alignItems: "center" }}
+        >
+          <select
+            value={customModelType}
+            onChange={(e) => setCustomModelType(e.target.value)}
+            style={{
+              padding: "0.5rem",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
+            }}
+          >
+            <option value="gemini">Gemini API</option>
+            <option value="ollama">Ollama (Local)</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Tên model (VD: gemma-4-31b-it)"
+            value={customModelName}
+            onChange={(e) => setCustomModelName(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "0.5rem",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={loading || !customModelName.trim()}
+            style={{
+              padding: "0.5rem 1rem",
+              backgroundColor: customModelName.trim() ? "#3b82f6" : "#94a3b8",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: customModelName.trim() ? "pointer" : "not-allowed",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            Thêm Model
+          </button>
+        </form>
       </div>
 
       <div className="all-models-section">

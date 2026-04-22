@@ -1,0 +1,14 @@
+{
+    "ollama": [],
+    "gemini": [
+        {
+            "name": "gemma-3-27b-it",
+            "display_name": "gemma-3-27b-it (Custom)",
+            "description": "Custom configured model",
+            "supported_generation_methods": [
+                "generateContent",
+                "streamGenerateContent"
+            ]
+        }
+    ]
+}

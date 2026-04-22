@@ -502,10 +502,20 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     # Call LLM directly with prompt string
     response = llm.invoke(prompt)
     
-    logger.info(f"✅ LLM response received, length: {len(response.content)} chars")
-    logger.info(f"📝 Response preview: {response.content[:200]}...")
+    # Normalize response.content to string
+    response_content = response.content
+    if isinstance(response_content, list):
+        if len(response_content) > 0 and isinstance(response_content[0], dict) and "text" in response_content[0]:
+            response_content = "".join([part.get("text", "") for part in response_content if isinstance(part, dict)])
+        else:
+            response_content = " ".join([str(p) for p in response_content])
+    elif not isinstance(response_content, str):
+        response_content = str(response_content)
     
-    if not response.content or len(response.content.strip()) == 0:
+    logger.info(f"✅ LLM response received, length: {len(response_content)} chars")
+    logger.info(f"📝 Response preview: {response_content[:200]}...")
+    
+    if not response_content or len(response_content.strip()) == 0:
         logger.error("❌ Empty response from LLM!")
         return {
             "answer": "Xin lỗi, không thể tạo câu trả lời từ thông tin tìm được.",
@@ -516,7 +526,7 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
 
     # Return the enhanced answer and metadata
     result = {
-        "answer": response.content,
+        "answer": response_content,
         "sources": [doc.page_content for doc in docs[:3]],
         "retrieval_method": retrieval_method
     }

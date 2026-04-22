@@ -459,6 +459,16 @@ async def query_ai(
     
     # The last message in the updated history is the AI's response
     ai_response = updated_history[-1].content
+    
+    # Normalize list to string if the content is returned as a list
+    if isinstance(ai_response, list):
+        if len(ai_response) > 0 and isinstance(ai_response[0], dict) and "text" in ai_response[0]:
+            ai_response = "".join([part.get("text", "") for part in ai_response if isinstance(part, dict)])
+        else:
+            ai_response = " ".join([str(p) for p in ai_response])
+    elif not isinstance(ai_response, str):
+        ai_response = str(ai_response)
+        
     logger.info(f"Agent response: {ai_response[:100]}...")
 
     now = datetime.utcnow()

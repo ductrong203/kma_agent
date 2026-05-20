@@ -30,54 +30,120 @@ const Dashboard = () => {
         setLoading(true);
         const token = localStorage.getItem("accessToken");
 
-        const response = await fetch("/api/admin/dashboard/stats", {
+        if (!token) {
+          console.warn("No token, using mock data");
+          setError("No authentication token - using demo data");
+          getMockData();
+          return;
+        }
+
+        console.log("Fetching from /api/admin/dashboard/stats...");
+        const apiUrl = "http://192.168.0.102:8000/api/admin/dashboard/stats";
+        const response = await fetch(apiUrl, {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         });
 
+        // Check response status
         if (!response.ok) {
-          throw new Error("Failed to fetch dashboard stats");
+          const contentType = response.headers.get("content-type") || "";
+          console.warn(
+            `API returned ${response.status}. Content-Type: ${contentType}`,
+          );
+
+          // Use mock data as fallback
+          getMockData();
+          setError(`API error (HTTP ${response.status}) - showing demo data`);
+          return;
         }
 
-        const data = await response.json();
-        const dashboardData = data.data;
+        // Check content type BEFORE parsing
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          console.error(`Invalid content-type: ${contentType}. Expected JSON.`);
+          getMockData();
+          setError(`Invalid API response (${contentType}) - showing demo data`);
+          return;
+        }
 
-        setStats({
-          totalRequests: dashboardData.total_requests_today,
-          tokenUsedNow: dashboardData.tokens_used_today,
-          tokenUsedMonth: dashboardData.tokens_used_month,
-          activeUsers: dashboardData.total_users,
-          requestChange: dashboardData.request_change_percent,
-          tokenChange: dashboardData.tokens_change_percent,
-          userChange: dashboardData.user_change_percent,
-        });
+        try {
+          const data = await response.json();
+          console.log("API Response:", data);
+          const dashboardData = data.data;
 
-        // Format top users for today
-        const topUsersFormatted = dashboardData.top_users_today.map((user) => ({
-          name: user.username,
-          requests: user.requests,
-          tokens: user.tokens,
-        }));
-        setTopUsers(topUsersFormatted);
+          if (!dashboardData) {
+            console.error("Missing 'data' field in response");
+            getMockData();
+            setError("API response format invalid - showing demo data");
+            return;
+          }
 
-        // Format top users for tokens this month
-        const tokenUsageFormatted = dashboardData.top_users_month.map(
-          (user) => ({
-            name: user.username,
-            tokens: user.tokens,
-          }),
-        );
-        setTokenUsage(tokenUsageFormatted);
+          setStats({
+            totalRequests: dashboardData.total_requests_today || 0,
+            tokenUsedNow: dashboardData.tokens_used_today || 0,
+            tokenUsedMonth: dashboardData.tokens_used_month || 0,
+            activeUsers: dashboardData.total_users || 0,
+            requestChange: dashboardData.request_change_percent || 0,
+            tokenChange: dashboardData.tokens_change_percent || 0,
+            userChange: dashboardData.user_change_percent || 0,
+          });
 
-        setError(null);
+          // Format top users for today
+          const topUsersFormatted = (dashboardData.top_users_today || []).map(
+            (user) => ({
+              name: user.username,
+              requests: user.requests,
+              tokens: user.tokens,
+            }),
+          );
+          setTopUsers(topUsersFormatted);
+
+          // Format top users for tokens this month
+          const tokenUsageFormatted = (dashboardData.top_users_month || []).map(
+            (user) => ({
+              name: user.username,
+              tokens: user.tokens,
+            }),
+          );
+          setTokenUsage(tokenUsageFormatted);
+
+          setError(null);
+        } catch (jsonError) {
+          console.error("Failed to parse JSON:", jsonError);
+          getMockData();
+          setError("Server response invalid - showing demo data");
+        }
       } catch (err) {
         console.error("Error fetching dashboard stats:", err);
-        setError(err.message);
+        getMockData();
+        setError("API error - showing demo data");
       } finally {
         setLoading(false);
       }
+    };
+
+    const getMockData = () => {
+      setStats({
+        totalRequests: 245,
+        tokenUsedNow: 12540,
+        tokenUsedMonth: 125400,
+        activeUsers: 18,
+        requestChange: 12.5,
+        tokenChange: 8.3,
+        userChange: 5.2,
+      });
+      setTopUsers([
+        { name: "user1", requests: 45, tokens: 3200 },
+        { name: "user2", requests: 38, tokens: 2800 },
+        { name: "user3", requests: 32, tokens: 2100 },
+      ]);
+      setTokenUsage([
+        { name: "user1", tokens: 8500 },
+        { name: "user3", tokens: 7200 },
+        { name: "user2", tokens: 6100 },
+      ]);
     };
 
     fetchDashboardStats();

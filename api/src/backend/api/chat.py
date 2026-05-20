@@ -1,11 +1,15 @@
 import logging
+import json
 import os
+import re
 import sys
+import asyncio
 from datetime import datetime
-from typing import List, Dict
+from typing import Any, List, Dict
 
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, status, Header, Depends
+from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage, AIMessage
 
 # Add the parent directory to sys.path to import our agent
@@ -41,11 +45,221 @@ router = APIRouter()
 
 # Agent already initialized above, no need to recreate
 
+STUDENT_CODE_PATTERN = re.compile(r"\b[ACDMT]T\d{6}\b", re.IGNORECASE)
+PRIVATE_SCORE_KEYWORDS = [
+    "điểm của", "điểm em", "điểm tôi", "điểm mình", "điểm sinh viên",
+    "xem điểm", "tra điểm", "kiểm tra điểm", "kết quả học tập",
+    "gpa", "điểm trung bình", "điểm tích lũy", "điểm học kỳ",
+]
+PRIVATE_INFO_KEYWORDS = [
+    "thông tin của", "thông tin em", "thông tin tôi", "thông tin mình",
+    "thông tin sinh viên", "lớp của", "lớp em", "lớp tôi", "lớp mình",
+    "họ tên", "tên của", "mã sinh viên",
+]
+OWN_STUDENT_PERMISSION_MESSAGE = "Bạn chỉ được xem điểm và thông tin của mình."
+MISSING_STUDENT_CODE_MESSAGE = "Tài khoản của bạn chưa có mã sinh viên. Vui lòng cập nhật mã sinh viên để xem điểm hoặc thông tin cá nhân."
+
 # Helper function to check if ObjectId is valid
 def validate_object_id(id: str):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=400, detail=f"Invalid ID format: {id}")
     return ObjectId(id)
+
+
+def normalize_message_content(content: Any) -> str:
+    """Convert legacy/LLM message payloads to plain text for API responses."""
+    if content is None:
+        normalized = ""
+    elif isinstance(content, str):
+        normalized = content
+    elif isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                parts.append(str(text) if text is not None else json.dumps(item, ensure_ascii=False))
+            else:
+                parts.append(str(item))
+        normalized = "\n".join(part for part in parts if part)
+    elif isinstance(content, dict):
+        text = content.get("text") or content.get("content")
+        normalized = str(text) if text is not None else json.dumps(content, ensure_ascii=False)
+    else:
+        normalized = str(content)
+
+    return strip_response_reasoning(strip_thinking_content(normalized))
+
+
+def strip_thinking_content(text: str) -> str:
+    if not text:
+        return ""
+    return re.sub(r"<think(?:ing)?>[\s\S]*?(?:</think(?:ing)?>|$)", "", str(text), flags=re.IGNORECASE).lstrip()
+
+
+def strip_response_reasoning(text: str) -> str:
+    text = str(text or "").strip()
+    if not text:
+        return ""
+
+    for pattern in [
+        r"Source included\?\s*Yes\.\s*",
+        r"Nguồn included\?\s*Yes\.\s*",
+        r"Draft:\s*",
+    ]:
+        matches = list(re.finditer(pattern, text, flags=re.IGNORECASE))
+        if matches:
+            text = text[matches[-1].end():].strip()
+            break
+
+    if re.search(r"(?im)^\s*(User Question|Role:|Constraints:|Professional,\s*Markdown\?|Concise\?|No greetings\?)", text):
+        source_match = re.search(r"(?im)^\s*(?:\*\*)?Nguồn\s*:", text)
+        if source_match:
+            before_source = text[:source_match.start()].strip()
+            paragraphs = [part.strip() for part in re.split(r"\n\s*\n", before_source) if part.strip()]
+            if paragraphs:
+                text = paragraphs[-1] + "\n\n" + text[source_match.start():].strip()
+
+    text = re.sub(
+        r"(?im)^\s*(User Question|Role:|Constraints:|Professional,\s*Markdown\?|Concise\?|No greetings\?|Other sources|Is a watch listed|Does the text explicitly say|However, the rule says|Anything else is only allowed|Additionally, if a watch).*$",
+        "",
+        text,
+    )
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def extract_document_context_sources(text: str) -> List[str]:
+    if "[DOCUMENT CONTEXT]" not in (text or ""):
+        return []
+
+    context = text.split("[DOCUMENT CONTEXT]", 1)[1]
+    sources = []
+    current = {}
+
+    for line in context.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[Source "):
+            if current:
+                sources.append(current)
+            current = {"source": stripped.strip("[]")}
+        elif current and stripped.startswith("File:"):
+            current["file"] = stripped.split(":", 1)[1].strip()
+        elif current and stripped.startswith("Chunk:"):
+            current["chunk"] = stripped.split(":", 1)[1].strip()
+
+    if current:
+        sources.append(current)
+
+    formatted = []
+    seen = set()
+    for source in sources:
+        file_name = source.get("file") or "Không rõ file"
+        chunk = source.get("chunk")
+        key = (file_name, chunk)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        suffix = f", chunk {chunk}" if chunk not in (None, "") else ""
+        formatted.append(f"- {file_name}{suffix}")
+
+    return formatted[:5]
+
+
+def ensure_uploaded_document_source_footer(answer: str, augmented_query: str) -> str:
+    answer = normalize_message_content(answer)
+    if "[DOCUMENT CONTEXT]" not in (augmented_query or ""):
+        return answer
+    if re.search(r"(?im)^\s*(\*\*)?nguồn\b", answer):
+        return answer
+
+    sources = extract_document_context_sources(augmented_query)
+    if not sources:
+        sources = ["- Không rõ nguồn cụ thể trong context"]
+
+    return f"{answer}\n\n**Nguồn:**\n" + "\n".join(sources)
+
+
+def normalize_student_code(student_code: Any) -> str:
+    if not student_code:
+        return ""
+    return str(student_code).strip().upper()
+
+
+def get_current_student_code(current_user: Any) -> str:
+    if isinstance(current_user, dict):
+        return normalize_student_code(current_user.get("student_code") or current_user.get("studentCode"))
+    return normalize_student_code(
+        getattr(current_user, "student_code", None) or getattr(current_user, "studentCode", None)
+    )
+
+
+def extract_student_codes(text: str) -> List[str]:
+    return sorted({match.group(0).upper() for match in STUDENT_CODE_PATTERN.finditer(text or "")})
+
+
+def is_private_student_query(text: str) -> bool:
+    query_lower = (text or "").lower()
+    has_private_keyword = any(keyword in query_lower for keyword in PRIVATE_SCORE_KEYWORDS + PRIVATE_INFO_KEYWORDS)
+    has_personal_pronoun = any(word in query_lower for word in ["tôi", "mình", "em", "của tôi", "của mình", "của em"])
+    has_student_code = bool(extract_student_codes(text))
+    if has_student_code and any(word in query_lower for word in ["điểm", "gpa", "thông tin", "lớp", "họ tên"]):
+        return True
+    return has_private_keyword and (has_personal_pronoun or has_student_code or "sinh viên" in query_lower)
+
+
+def authorize_and_augment_student_query(user_query: str, current_user: Any) -> str:
+    """
+    Enforce per-user student data access before the agent can call score/info tools.
+    The client-provided student_code header is intentionally ignored.
+    """
+    own_student_code = get_current_student_code(current_user)
+    requested_codes = extract_student_codes(user_query)
+
+    if requested_codes and any(code != own_student_code for code in requested_codes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=OWN_STUDENT_PERMISSION_MESSAGE,
+        )
+
+    if is_private_student_query(user_query):
+        if not own_student_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=MISSING_STUDENT_CODE_MESSAGE,
+            )
+        return (
+            f"My authenticated student code is {own_student_code}. "
+            "Only use this student code for any score or student information tool call. "
+            "Never use any other student code.\n\n"
+            "If the user asks for the current semester but no exact semester code is provided, "
+            "call get_student_scores without the semester filter and summarize the latest semester available in the returned data.\n\n"
+            f"{user_query}"
+        )
+
+    return user_query
+
+
+def sse_event(event: str, data: Any) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def chunk_text(text: str, chunk_size: int = 180) -> List[str]:
+    if not text:
+        return []
+    chunks = []
+    current = ""
+    for word in text.split(" "):
+        next_part = word if not current else f"{current} {word}"
+        if len(next_part) > chunk_size and current:
+            chunks.append(current + " ")
+            current = word
+        else:
+            current = next_part
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 # Helper function to estimate token count for rate limiting
@@ -61,6 +275,9 @@ def estimate_token_count(prompt_text: str, response_text: str) -> int:
         Ước tính tổng số token
     """
     # Một cách ước tính đơn giản: ~4 ký tự = 1 token (thực tế phụ thuộc vào tokenizer)
+    prompt_text = normalize_message_content(prompt_text)
+    response_text = normalize_message_content(response_text)
+
     prompt_tokens = len(prompt_text) // 4
     response_tokens = len(response_text) // 4
     
@@ -137,7 +354,7 @@ async def get_conversations_of_user(
         preview = ""
         if first_message:
             # Get full first user message (no truncation)
-            preview = first_message.get("content", "")
+            preview = normalize_message_content(first_message.get("content", ""))
         
         response_data = ConversationResponse(
             _id = str(conv["_id"]),
@@ -291,7 +508,7 @@ async def get_messages_of_conversation(
     async for msg in cursor:
         response_msg = MessageResponse(
             _id = str(msg["_id"]),
-            content = msg["content"],
+            content = normalize_message_content(msg.get("content")),
             is_user = msg["is_user"],
             created_at = msg["created_at"],
             attachments = msg.get("attachments", [])
@@ -356,16 +573,16 @@ async def query_ai(
     now = datetime.utcnow()
 
     if student_code:
-        logger.info(f"Student code: {student_code}")
-        content = f"My student code is {student_code}" + message.content
-    else:
-        content = message.content
+        logger.info("Ignoring client-provided student_code header; using authenticated user profile")
+
+    content = message.content
+    augmented_private_content = authorize_and_augment_student_query(content, current_user)
 
     logger.info(f"DEBUG QUERY_AI START - message.attachments received from frontend: type={type(message.attachments)}, value={message.attachments}")
 
     # ==================== NEW: Handle Attachments ====================
     attachment_objects = []
-    augmented_content = content
+    augmented_content = augmented_private_content
     
     if message.attachments:
         # Get attachment RAG service
@@ -373,14 +590,14 @@ async def query_ai(
         
         # Build context from attachments
         attachment_context = await attachment_rag_service.build_context_from_attachments(
-            query=content,
+            query=augmented_private_content,
             file_ids=message.attachments,
-            max_context_length=3000
+            max_context_length=12000
         )
         
         # Augment content with attachment context
         if attachment_context:
-            augmented_content = f"{content}\n\n[DOCUMENT CONTEXT]\n{attachment_context}"
+            augmented_content = f"{augmented_private_content}\n\n[DOCUMENT CONTEXT]\n{attachment_context}"
         
         # Prepare attachment objects for DB storage
         for file_id in message.attachments:
@@ -448,26 +665,21 @@ async def query_ai(
     # Convert DB messages to langchain message format
     conversation_history = []
     async for msg in cursor:
+        msg_content = normalize_message_content(msg.get("content"))
         if msg["is_user"]:
-            conversation_history.append(HumanMessage(content=msg["content"]))
+            conversation_history.append(HumanMessage(content=msg_content))
         else:
-            conversation_history.append(AIMessage(content=msg["content"]))
+            conversation_history.append(AIMessage(content=msg_content))
 
     # Use the chat_with_memory method to get a response with context
     logger.info(f"Processing query with memory: {augmented_content[:100]}..., department: {selected_folder}")
     updated_history = await agent.chat_with_memory(conversation_history[:-1], augmented_content, department=selected_folder)
     
     # The last message in the updated history is the AI's response
-    ai_response = updated_history[-1].content
-    
-    # Normalize list to string if the content is returned as a list
-    if isinstance(ai_response, list):
-        if len(ai_response) > 0 and isinstance(ai_response[0], dict) and "text" in ai_response[0]:
-            ai_response = "".join([part.get("text", "") for part in ai_response if isinstance(part, dict)])
-        else:
-            ai_response = " ".join([str(p) for p in ai_response])
-    elif not isinstance(ai_response, str):
-        ai_response = str(ai_response)
+    ai_response = ensure_uploaded_document_source_footer(
+        updated_history[-1].content,
+        augmented_content
+    )
         
     logger.info(f"Agent response: {ai_response[:100]}...")
 
@@ -494,7 +706,7 @@ async def query_ai(
 
     response_data = MessageResponse(
         _id=str(created_message["_id"]),
-        content=created_message["content"],
+        content=normalize_message_content(created_message.get("content")),
         is_user=created_message["is_user"],
         created_at=created_message["created_at"],
         attachments=created_message.get("attachments", [])  # NEW: Include attachments
@@ -548,6 +760,87 @@ async def query_ai(
     )
 
 
+@router.post("/{conversation_id}/messages/stream")
+async def query_ai_stream(
+    conversation_id: str,
+    message: MessageCreate,
+    student_code: str = Header(None),
+    current_user = Depends(require_auth)
+):
+    """Stream an AI response over SSE while preserving the existing persistence flow."""
+
+    async def event_generator():
+        try:
+            yield sse_event("status", {"message": "Đã nhận câu hỏi, đang xử lý..."})
+            task = asyncio.create_task(query_ai(
+                conversation_id=conversation_id,
+                message=message,
+                student_code=student_code,
+                current_user=current_user,
+            ))
+
+            status_messages = [
+                "Đang tìm kiếm thông tin phù hợp...",
+                "Đang đọc tài liệu và tổng hợp câu trả lời...",
+                "Đang hoàn thiện phản hồi...",
+            ]
+            status_index = 0
+            while not task.done():
+                await asyncio.sleep(1.5)
+                yield sse_event("status", {
+                    "message": status_messages[status_index % len(status_messages)]
+                })
+                status_index += 1
+
+            response = await task
+
+            response_data = response.data
+            content = normalize_message_content(response_data.content)
+            attachments = [
+                attachment.model_dump() if hasattr(attachment, "model_dump") else attachment
+                for attachment in (response_data.attachments or [])
+            ]
+
+            yield sse_event("message_start", {
+                "_id": response_data.id,
+                "created_at": response_data.created_at.isoformat(),
+                "attachments": attachments,
+            })
+
+            for chunk in chunk_text(content):
+                yield sse_event("delta", {"content": chunk})
+                await asyncio.sleep(0.04)
+
+            yield sse_event("done", {
+                "_id": response_data.id,
+                "content": content,
+                "is_user": response_data.is_user,
+                "created_at": response_data.created_at.isoformat(),
+                "attachments": attachments,
+            })
+        except HTTPException as exc:
+            yield sse_event("error", {
+                "status": exc.status_code,
+                "message": exc.detail,
+            })
+        except Exception as exc:
+            logger.error(f"Streaming chat failed: {exc}", exc_info=True)
+            yield sse_event("error", {
+                "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "message": "Có lỗi xảy ra khi xử lý phản hồi streaming.",
+            })
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.post("/department-query", response_model=BaseResponse[QuickMessageResponse])
 async def department_specific_query(
     message: MessageQuickChat,
@@ -576,11 +869,10 @@ async def department_specific_query(
         agent = ReActGraph()
         agent.create_graph()
         
-        # Add student code if provided
-        content = message.content
+        # Use authenticated user's student code only; never trust client-provided header
         if student_code:
-            logger.info(f"Student code: {student_code}")
-            content = f"My student code is {student_code}. {content}"
+            logger.info("Ignoring client-provided student_code header; using authenticated user profile")
+        content = authorize_and_augment_student_query(message.content, current_user)
         
         logger.info(f"Department query - Department: {department}")
         logger.info(f"Query: {content}")
@@ -591,7 +883,7 @@ async def department_specific_query(
         
         # Get the final response from agent
         if result and len(result) > 0:
-            response_text = result[-1].content
+            response_text = normalize_message_content(result[-1].content)
         else:
             response_text = "Không thể xử lý câu hỏi của bạn. Vui lòng thử lại."
         
@@ -666,18 +958,15 @@ async def quick_chat(
     
     # Use the chat_with_memory method consistently with other endpoint
     logger.info(f"Processing quick query: {message.content}")
-    logger.info(f"Student code: {student_code}")
-
     if student_code:
-        logger.info(f"Student code: {student_code}")
-        content = f"My student code is {student_code}" + message.content
-    else:
-        content = message.content
+        logger.info("Ignoring client-provided student_code header; using authenticated user profile")
+
+    content = authorize_and_augment_student_query(message.content, current_user)
 
     response = await agent.chat_with_memory([], content)
     
     # The last message in the response is the AI's answer
-    ai_response = response[-1].content
+    ai_response = normalize_message_content(response[-1].content)
     logger.info(f"Agent quick response: {ai_response}")
     
     now = datetime.utcnow()
@@ -716,7 +1005,7 @@ async def test_rag_endpoint(message: MessageQuickChat):
         # Use the existing agent instance and chat_with_memory method
         result = await agent.chat_with_memory([], message.content)
         
-        response_message = result[-1].content if result else "No response generated"
+        response_message = normalize_message_content(result[-1].content) if result else "No response generated"
         
         return BaseResponse(
             statusCode=status.HTTP_200_OK,

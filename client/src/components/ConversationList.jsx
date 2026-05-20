@@ -8,9 +8,12 @@ import {
   FiSettings,
   FiMoon,
   FiSun,
+  FiUser,
+  FiX,
 } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import chatService from "../services/chatService";
+import userService from "../services/userService";
 import "./ConversationList.css";
 
 const ConversationList = ({
@@ -23,10 +26,26 @@ const ConversationList = ({
   onLogout,
   isDarkMode,
   onToggleDarkMode,
+  onUserUpdate,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountForm, setAccountForm] = useState({
+    username: "",
+    email: "",
+    student_name: "",
+    student_code: "",
+    student_class: "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: "",
+  });
+  const [accountError, setAccountError] = useState("");
+  const [accountSuccess, setAccountSuccess] = useState("");
 
   useEffect(() => {
     const loadConversationsOnMount = async () => {
@@ -177,6 +196,96 @@ const ConversationList = ({
     setEditTitle("");
   };
 
+  const openAccountModal = () => {
+    setAccountForm({
+      username: user?.username || "",
+      email: user?.email || "",
+      student_name: user?.name || "",
+      student_code: user?.studentCode || user?.student_code || "",
+      student_class: user?.studentClass || user?.student_class || "",
+    });
+    setPasswordForm({
+      current_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
+    setAccountError("");
+    setAccountSuccess("");
+    setIsAccountModalOpen(true);
+  };
+
+  const handleAccountChange = (event) => {
+    const { name, value } = event.target;
+    setAccountForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handlePasswordChange = (event) => {
+    const { name, value } = event.target;
+    setPasswordForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setAccountError("");
+    setAccountSuccess("");
+
+    const response = await userService.updateOwnProfile({
+      username: accountForm.username,
+      email: accountForm.email || null,
+      student_name: accountForm.student_name || null,
+      student_code: accountForm.student_code || null,
+      student_class: accountForm.student_class || null,
+    });
+
+    if (!response.success) {
+      setAccountError(response.error || "Không thể cập nhật thông tin");
+      return;
+    }
+
+    const updatedUser = {
+      ...user,
+      id: response.data._id || user.id,
+      username: response.data.username,
+      name: response.data.student_name || response.data.username,
+      email: response.data.email,
+      studentCode: response.data.student_code,
+      studentClass: response.data.student_class,
+      role: response.data.role || user.role,
+    };
+
+    localStorage.setItem("userInfo", JSON.stringify(updatedUser));
+    onUserUpdate?.(updatedUser);
+    setAccountSuccess("Đã cập nhật thông tin cá nhân");
+  };
+
+  const savePassword = async (event) => {
+    event.preventDefault();
+    setAccountError("");
+    setAccountSuccess("");
+
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setAccountError("Mật khẩu mới không khớp");
+      return;
+    }
+
+    const response = await userService.changeOwnPassword({
+      current_password: passwordForm.current_password,
+      new_password: passwordForm.new_password,
+    });
+
+    if (!response.success) {
+      setAccountError(response.error || "Không thể đổi mật khẩu");
+      return;
+    }
+
+    setPasswordForm({
+      current_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
+    setAccountSuccess("Đã đổi mật khẩu");
+  };
+
   const getUserInitials = () => {
     if (!user?.name) return "U";
     const parts = user.name.split(" ");
@@ -198,6 +307,16 @@ const ConversationList = ({
     <div className="sidebar">
       {/* Header */}
       <div className="sidebar-header">
+        {/* Brand */}
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-logo">
+            <img src="/img/kma.png" alt="ACTVN" />
+          </div>
+          <div className="sidebar-brand-text">
+            <div className="sidebar-brand-name">ACTVN-AGENT</div>
+            <div className="sidebar-brand-tagline">Học viện Kỹ thuật Mật mã</div>
+          </div>
+        </div>
         <button
           onClick={handleNewConversation}
           className="new-chat-button"
@@ -297,9 +416,21 @@ const ConversationList = ({
       <div className="sidebar-footer">
         <div className="sidebar-user-info">
           <div className="sidebar-user-avatar">{getUserInitials()}</div>
-          <span className="sidebar-user-name">
-            {user.name || user.username || "Người dùng"}
-          </span>
+          <div className="sidebar-user-text">
+            <span
+              className="sidebar-user-name"
+              title={user.name || user.username || "User"}
+            >
+              {user.name || user.username || "Người dùng"}
+            </span>
+            <span className="sidebar-user-meta">
+              {user.studentCode ||
+                user.student_code ||
+                user.username ||
+                user.email ||
+                "Active"}
+            </span>
+          </div>
           <div className="sidebar-user-actions">
             <button
               className="sidebar-action-btn"
@@ -313,6 +444,15 @@ const ConversationList = ({
                 <FiSettings size={14} />
               </Link>
             )}
+            {user.role !== "admin" && (
+              <button
+                className="sidebar-action-btn"
+                onClick={openAccountModal}
+                title="Tài khoản"
+              >
+                <FiUser size={14} />
+              </button>
+            )}
             <button
               className="sidebar-action-btn"
               onClick={onLogout}
@@ -323,6 +463,120 @@ const ConversationList = ({
           </div>
         </div>
       </div>
+
+      {isAccountModalOpen && user.role !== "admin" && (
+        <div className="account-modal-overlay">
+          <div className="account-modal">
+            <div className="account-modal-header">
+              <h2>Tài khoản</h2>
+              <button
+                className="account-modal-close"
+                onClick={() => setIsAccountModalOpen(false)}
+              >
+                <FiX />
+              </button>
+            </div>
+
+            {accountError && (
+              <div className="account-alert error">{accountError}</div>
+            )}
+            {accountSuccess && (
+              <div className="account-alert success">{accountSuccess}</div>
+            )}
+
+            <form className="account-form" onSubmit={saveProfile}>
+              <div className="account-form-grid">
+                <label>
+                  <span>Username</span>
+                  <input
+                    name="username"
+                    value={accountForm.username}
+                    onChange={handleAccountChange}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    name="email"
+                    value={accountForm.email}
+                    onChange={handleAccountChange}
+                  />
+                </label>
+                <label>
+                  <span>Họ tên</span>
+                  <input
+                    name="student_name"
+                    value={accountForm.student_name}
+                    onChange={handleAccountChange}
+                  />
+                </label>
+                <label>
+                  <span>Mã sinh viên</span>
+                  <input
+                    name="student_code"
+                    value={accountForm.student_code}
+                    onChange={handleAccountChange}
+                  />
+                </label>
+                <label>
+                  <span>Lớp</span>
+                  <input
+                    name="student_class"
+                    value={accountForm.student_class}
+                    onChange={handleAccountChange}
+                  />
+                </label>
+              </div>
+              <button className="account-primary-btn" type="submit">
+                Lưu thông tin
+              </button>
+            </form>
+
+            <form className="account-form" onSubmit={savePassword}>
+              <h3>Đổi mật khẩu</h3>
+              <div className="account-form-grid">
+                <label>
+                  <span>Mật khẩu hiện tại</span>
+                  <input
+                    type="password"
+                    name="current_password"
+                    value={passwordForm.current_password}
+                    onChange={handlePasswordChange}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Mật khẩu mới</span>
+                  <input
+                    type="password"
+                    name="new_password"
+                    value={passwordForm.new_password}
+                    onChange={handlePasswordChange}
+                    minLength={6}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Nhập lại mật khẩu mới</span>
+                  <input
+                    type="password"
+                    name="confirm_password"
+                    value={passwordForm.confirm_password}
+                    onChange={handlePasswordChange}
+                    minLength={6}
+                    required
+                  />
+                </label>
+              </div>
+              <button className="account-primary-btn" type="submit">
+                Đổi mật khẩu
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

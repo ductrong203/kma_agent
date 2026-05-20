@@ -14,6 +14,7 @@ class ScoreInput(BaseModel):
     semester: Optional[str] = Field(None,
                                     description="Filter scores by semester in format ki1_2024_2025, k2_2024_2025, etc.")
     subject_id: Optional[int] = Field(None, description="Filter scores by subject ID")
+    subject_name: Optional[str] = Field(None, description="Filter scores by subject name, e.g. 'Toan cao cap', 'Lap trinh Python'. Prefer this over subject_id when the user asks by course name.")
 
     @validator('semester')
     def validate_semester_format(cls, value):
@@ -29,10 +30,12 @@ class ScoreInput(BaseModel):
 @tool("get_student_scores", args_schema=ScoreInput,
       description=("Get KMA student scores from the database. "
                     "Useful for retrieving scores for a specific student. "
-                    "The student code must be provided. Optionally, you can filter by semester in format ki1-2024-2025, k2-2024-2025, or some thing like that.")
+                    "The student code must be provided. Optionally filter by semester in format ki1-2024-2025 or k2-2024-2025. "
+                    "When the user asks for a course/subject, pass subject_name from the user's text instead of inventing a subject_id.")
                     )
 async def get_student_scores(student_code: str, semester: Optional[str] = None,
-                             subject_id: Optional[int] = None) -> str:
+                             subject_id: Optional[int] = None,
+                             subject_name: Optional[str] = None) -> str:
     """
     Get student scores from the database.
 
@@ -55,7 +58,12 @@ async def get_student_scores(student_code: str, semester: Optional[str] = None,
                                    "message": f"Invalid semester format. Must be in format ki1_2024_2025, k2_2024_2025, etc."})
 
         # Create filter
-        filter = ScoreFilter(student_code=student_code, semester=semester, subject_id=subject_id)
+        filter = ScoreFilter(
+            student_code=student_code,
+            semester=semester,
+            subject_id=subject_id,
+            subject_name=subject_name
+        )
 
         # Get scores
         scores = await global_db.db.get_scores(filter)

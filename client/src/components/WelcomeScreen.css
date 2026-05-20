@@ -1,6 +1,6 @@
 /* ============================================================
    ACTVN-AGENT — Welcome Screen
-   Modern Premium Design
+   Modern Premium Design — Mobile First
    ============================================================ */
 
 .welcome-screen {
@@ -112,6 +112,10 @@ html.dark .welcome-subheading {
   transform: translateY(-2px);
 }
 
+.welcome-grid-card:active {
+  transform: translateY(0) scale(0.98);
+}
+
 html.dark .welcome-grid-card {
   background: var(--surface-bright);
   border-color: var(--outline-variant);
@@ -212,6 +216,10 @@ html.dark .welcome-grid-card:hover .welcome-grid-card-arrow {
   color: var(--kma-primary);
 }
 
+.welcome-suggestion-pill:active {
+  transform: scale(0.97);
+}
+
 html.dark .welcome-suggestion-pill {
   border-color: var(--outline-variant);
   color: var(--on-surface-variant);
@@ -223,32 +231,148 @@ html.dark .welcome-suggestion-pill:hover {
   color: var(--kma-primary-light);
 }
 
-/* ---- Responsive ---- */
+/* ============================================================
+   MOBILE RESPONSIVE — Welcome Screen
+   ============================================================ */
+
 @media (max-width: 768px) {
   .welcome-screen {
-    padding: 20px 16px 32px;
-    gap: 32px;
+    padding: 20px 14px 24px;
+    gap: 24px;
+    justify-content: flex-start;
+    padding-top: 10vh;
   }
+
+  .welcome-hero {
+    gap: 12px;
+  }
+
+  .welcome-brand-circle {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+
+  .welcome-brand-circle img {
+    width: 28px;
+    height: 28px;
+  }
+
   .welcome-heading {
-    font-size: 1.35rem;
+    font-size: 1.4rem;
+    line-height: 1.25;
   }
+
   .welcome-subheading {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    max-width: 100%;
   }
+
+  /* 2-column grid preserved on tablet, 1-col on small */
   .welcome-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
+
   .welcome-grid-card {
-    padding: 16px;
+    padding: 14px;
+    border-radius: 12px;
+    gap: 6px;
+  }
+
+  .welcome-grid-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .welcome-grid-card-title {
+    font-size: 0.82rem;
+  }
+
+  .welcome-grid-card-desc {
+    font-size: 0.72rem;
+    line-height: 1.4;
+  }
+
+  .welcome-grid-card-arrow {
+    top: 14px;
+    right: 14px;
+  }
+
+  /* Scrollable pills on mobile */
+  .welcome-suggestions {
+    gap: 6px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 0 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .welcome-suggestions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .welcome-suggestion-pill {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 8px 14px;
+    font-size: 0.78rem;
   }
 }
 
 @media (max-width: 480px) {
+  .welcome-screen {
+    padding: 16px 10px 20px;
+    gap: 20px;
+    padding-top: 6vh;
+  }
+
   .welcome-heading {
     font-size: 1.2rem;
   }
+
+  .welcome-subheading {
+    font-size: 0.82rem;
+  }
+
+  /* Single column on very small screens */
+  .welcome-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .welcome-grid-card {
+    padding: 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .welcome-grid-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .welcome-grid-card-title {
+    font-size: 0.84rem;
+  }
+
+  .welcome-grid-card-desc {
+    display: none;
+  }
+
+  .welcome-grid-card-arrow {
+    position: static;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
   .welcome-suggestion-pill {
     font-size: 0.75rem;
-    padding: 7px 14px;
+    padding: 7px 12px;
   }
 }

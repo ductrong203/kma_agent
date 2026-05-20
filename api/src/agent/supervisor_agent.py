@@ -1,7 +1,10 @@
 import logging
 import os
+import json
+import re
+import unicodedata
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
@@ -14,6 +17,8 @@ from ..llm.config import get_gemini_llm, get_llm
 from ..llm.model_manager import model_manager, ModelType
 from ..rag import create_rag_tool
 from ..score import get_student_scores, get_student_info, calculate_average_scores
+from ..score.models import ScoreFilter
+from ..score.student_tool import global_db
 
 load_dotenv()
 
@@ -34,6 +39,217 @@ tools = [score_tool, student_info_tool, calculator_tool, rag_tool]
 prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
 with open(os.path.join(prompts_dir, "system_prompt.txt"), "r", encoding="utf-8") as f:
     react_prompt = f.read().strip()
+
+
+STUDENT_CODE_RE = re.compile(r"\b[ACDMT]T\d{6}\b", re.IGNORECASE)
+SEMESTER_RE = re.compile(r"\b(?:ki|k|ky|hk|hoc ky)\s*([1-4])\s*[-_/ ]\s*(\d{4})\s*[-_/ ]\s*(\d{4})\b", re.IGNORECASE)
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(
+        char for char in unicodedata.normalize("NFD", text or "")
+        if unicodedata.category(char) != "Mn"
+    ).lower()
+
+
+def _extract_authenticated_student_code(query: str) -> Optional[str]:
+    auth_match = re.search(
+        r"My authenticated student code is\s+([A-Z]{2}\d{6})",
+        query or "",
+        re.IGNORECASE,
+    )
+    if auth_match:
+        return auth_match.group(1).upper()
+
+    codes = STUDENT_CODE_RE.findall(query or "")
+    return codes[0].upper() if codes else None
+
+
+def _looks_like_score_query(query: str) -> bool:
+    normalized = _strip_accents(query)
+    score_keywords = [
+        "diem", "gpa", "diem trung binh", "diem tich luy",
+        "ket qua hoc tap", "mon hoc", "hoc ky", "tin chi",
+    ]
+    return any(keyword in normalized for keyword in score_keywords)
+
+
+def _looks_like_student_info_query(query: str) -> bool:
+    normalized = _strip_accents(query)
+    info_keywords = [
+        "thong tin cua toi", "thong tin cua minh", "thong tin sinh vien",
+        "lop cua toi", "ho ten cua toi", "ma sinh vien cua toi",
+    ]
+    return any(keyword in normalized for keyword in info_keywords)
+
+
+def _extract_semester(query: str) -> Optional[str]:
+    normalized = _strip_accents(query).replace("_", "-")
+    match = SEMESTER_RE.search(normalized)
+    if match:
+        return f"ki{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+    year_match = re.search(r"(?:hoc ky|ky|ki|hk)\s*([1-4]).*?(\d{4})\s*[-/]\s*(\d{4})", normalized)
+    if year_match:
+        return f"ki{year_match.group(1)}-{year_match.group(2)}-{year_match.group(3)}"
+
+    return None
+
+
+def _extract_subject_name(query: str) -> Optional[str]:
+    normalized = _strip_accents(query)
+    if "mon" not in normalized and "mon hoc" not in normalized:
+        return None
+
+    cleaned = re.sub(r"My authenticated student code is.*?\n\n", "", query or "", flags=re.IGNORECASE | re.DOTALL)
+    patterns = [
+        r"(?:môn học|môn)\s+(.+?)(?:\s+(?:trong|ở|hoc ky|học kỳ|kỳ|ki|hk)\b|[?.!,]|$)",
+        r"(?:điểm|diem)\s+(?:môn học|môn)\s+(.+?)(?:\s+(?:trong|ở|hoc ky|học kỳ|kỳ|ki|hk)\b|[?.!,]|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, cleaned, flags=re.IGNORECASE)
+        if match:
+            subject = match.group(1).strip(" :;-")
+            subject_norm = _strip_accents(subject)
+            if subject and subject_norm not in {"cua toi", "toi", "tu dau toi gio", "hoc ky nay"}:
+                return subject
+    return None
+
+
+def _score_value(score) -> Optional[float]:
+    value = getattr(score, "score_over_rall", None)
+    return float(value) if value is not None else None
+
+
+def _credit_value(score) -> int:
+    subject = getattr(score, "subject", None)
+    credits = getattr(subject, "subject_credits", None) if subject else None
+    return int(credits or 0)
+
+
+def _calculate_gpa(scores) -> Tuple[Optional[float], int]:
+    total_credits = 0
+    total_weighted = 0.0
+    for score in scores:
+        score_value = _score_value(score)
+        credits = _credit_value(score)
+        if score_value is None or credits <= 0:
+            continue
+        total_credits += credits
+        total_weighted += score_value * credits
+    if total_credits <= 0:
+        return None, 0
+    return round(total_weighted / total_credits, 2), total_credits
+
+
+def _latest_semester(scores) -> Optional[str]:
+    semesters = [score.semester for score in scores if getattr(score, "semester", None)]
+    return semesters[0] if semesters else None
+
+
+def _format_scores_answer(scores, student_code: str, query: str, semester_filter: Optional[str], subject_name: Optional[str]) -> str:
+    if not scores:
+        parts = [f"Không tìm thấy điểm của tài khoản `{student_code}`"]
+        if semester_filter:
+            parts.append(f"trong học kỳ `{semester_filter}`")
+        if subject_name:
+            parts.append(f"cho môn `{subject_name}`")
+        return " ".join(parts) + "."
+
+    normalized = _strip_accents(query)
+    wants_latest = any(kw in normalized for kw in ["hoc ky nay", "ky nay", "ki nay", "gan nhat", "moi nhat"])
+    if wants_latest and not semester_filter:
+        latest = _latest_semester(scores)
+        if latest:
+            scores = [score for score in scores if score.semester == latest]
+            semester_filter = latest
+
+    overall_gpa, overall_credits = _calculate_gpa(scores)
+    title = "Điểm của bạn"
+    if semester_filter:
+        title += f" trong học kỳ `{semester_filter}`"
+    elif any(kw in normalized for kw in ["tu dau", "tich luy", "gpa tong", "tong", "den gio"]):
+        title += " từ đầu đến giờ"
+    if subject_name:
+        title += f" - môn `{subject_name}`"
+
+    lines = [f"**{title}**", ""]
+    lines.append("| Học kỳ | Môn học | Số tín chỉ | Điểm |")
+    lines.append("|---|---|---:|---:|")
+    for score in scores:
+        subject = getattr(score, "subject", None)
+        subject_label = getattr(subject, "subject_name", "-") if subject else "-"
+        credits = _credit_value(score)
+        score_value = _score_value(score)
+        score_text = "-" if score_value is None else f"{score_value:.2f}".rstrip("0").rstrip(".")
+        lines.append(f"| {score.semester or '-'} | {subject_label} | {credits} | {score_text} |")
+
+    lines.append("")
+    if overall_gpa is None:
+        lines.append("**GPA:** Chưa đủ dữ liệu tín chỉ/điểm để tính.")
+    else:
+        gpa_label = "GPA học kỳ" if semester_filter else "GPA tổng"
+        lines.append(f"**{gpa_label}: {overall_gpa}** trên {overall_credits} tín chỉ.")
+
+    if not semester_filter and not subject_name:
+        by_semester = {}
+        for score in scores:
+            by_semester.setdefault(score.semester or "Không rõ học kỳ", []).append(score)
+        lines.append("")
+        lines.append("**GPA theo từng học kỳ:**")
+        for semester, semester_scores in by_semester.items():
+            semester_gpa, semester_credits = _calculate_gpa(semester_scores)
+            if semester_gpa is not None:
+                lines.append(f"- `{semester}`: {semester_gpa} ({semester_credits} tín chỉ)")
+
+    return "\n".join(lines)
+
+
+async def _handle_student_query_directly(query: str) -> Optional[AIMessage]:
+    student_code = _extract_authenticated_student_code(query)
+    if not student_code:
+        return None
+
+    if _looks_like_student_info_query(query) and not _looks_like_score_query(query):
+        result = await get_student_info.ainvoke({"student_code": student_code})
+        try:
+            data = json.loads(result)
+            student = data.get("student")
+        except Exception:
+            student = None
+        if not student:
+            return AIMessage(content=f"Không tìm thấy thông tin sinh viên của tài khoản `{student_code}`.")
+        return AIMessage(content=(
+            "**Thông tin của bạn**\n\n"
+            f"- Mã sinh viên: `{student.get('student_code', student_code)}`\n"
+            f"- Họ tên: {student.get('student_name') or '-'}\n"
+            f"- Lớp: {student.get('student_class') or '-'}"
+        ))
+
+    if not _looks_like_score_query(query):
+        return None
+
+    semester = _extract_semester(query)
+    subject_name = _extract_subject_name(query)
+    score_filter = ScoreFilter(
+        student_code=student_code,
+        semester=semester,
+    )
+
+    try:
+        scores = await global_db.db.get_scores(score_filter)
+    finally:
+        await global_db.close()
+
+    if subject_name:
+        subject_query = _strip_accents(subject_name)
+        scores = [
+            score for score in scores
+            if subject_query in _strip_accents(getattr(score.subject, "subject_name", ""))
+        ]
+
+    answer = _format_scores_answer(scores, student_code, query, semester, subject_name)
+    return AIMessage(content=answer)
 
 
 def get_tool_descriptions(tools_list: list) -> str:
@@ -87,6 +303,11 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
     has_file_context = "[DOCUMENT CONTEXT]" in latest_query
     if has_file_context:
         logger.info("📎 File context detected in query - SKIPPING reformulation to preserve [DOCUMENT CONTEXT] marker")
+        return state
+
+    has_auth_context = "My authenticated student code is" in latest_query
+    if has_auth_context:
+        logger.info("Student auth context detected in query - SKIPPING reformulation to preserve access control context")
         return state
     
     # The conversational context prompt helps rewrite the latest query with context
@@ -175,6 +396,11 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
     force_rag_tool = False
     
     if last_message and isinstance(last_message, HumanMessage):
+        direct_student_response = await _handle_student_query_directly(last_message.content)
+        if direct_student_response:
+            logger.info("✅ Direct student score/info handler returned response; skipping Gemini tool calling")
+            return {"messages": state["messages"] + [direct_student_response]}
+
         query_lower = last_message.content.lower()
         query = last_message.content
         
@@ -199,6 +425,18 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
                                       'lớp của', 'lớp em', 'lớp tôi',
                                       'họ tên của', 'họ tên em', 'tên của', 'tên em']
             
+            personal_score_keywords += [
+                'điểm của', 'điểm em', 'điểm tôi', 'điểm mình', 'điểm sinh viên',
+                'gpa của', 'gpa em', 'gpa tôi', 'gpa mình',
+                'xem điểm', 'tra điểm', 'kiểm tra điểm',
+                'điểm học kỳ', 'điểm trung bình', 'điểm tích lũy', 'kết quả học tập',
+            ]
+            personal_info_keywords += [
+                'thông tin của', 'thông tin em', 'thông tin tôi', 'thông tin mình',
+                'thông tin sinh viên', 'lớp của', 'lớp em', 'lớp tôi', 'lớp mình',
+                'họ tên của', 'họ tên em', 'tên của', 'tên em',
+            ]
+
             is_personal_score = any(kw in query_lower for kw in personal_score_keywords) and has_student_code
             is_personal_info = any(kw in query_lower for kw in personal_info_keywords) and has_student_code
             
@@ -294,7 +532,27 @@ Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhấ
 3. ✅ Nếu là câu hỏi về điểm cá nhân + có student code: Gọi score tool
 4. ⚠️ KHÔNG bao giờ bỏ qua tài liệu được upload - đó là ưu tiên hàng đầu"""
     
-    enhanced_prompt = react_prompt.format(tool_descriptions=tool_descriptions) + few_shot_examples
+    permission_rules = """
+
+### STUDENT DATA PERMISSION RULES
+- For score or student information questions, only use the authenticated student code injected by the backend: "My authenticated student code is ...".
+- Do not ask the user to type a student code for personal queries like "điểm của tôi", "thông tin của tôi", "GPA của tôi", or "điểm học kỳ này của tôi".
+- Never use a different student code from the user's message or chat history.
+- If the user tries to view another student's scores or personal information, answer exactly: "Bạn chỉ được xem điểm và thông tin của mình."
+"""
+
+    citation_rules = """
+
+### DOCUMENT CITATION RULES
+- When answering from KMA regulations, uploaded documents, or any [DOCUMENT CONTEXT], the final answer MUST include a **Nguồn:** section.
+- In **Nguồn:**, cite the exact file name, the relevant ban/phòng/department if available, and the Điều/Khoản/Điểm/Phụ lục if present in the provided context.
+- If the context has source markers such as [Source 1], "File:", "Chunk:", or department metadata, use them instead of saying a vague phrase like "the uploaded document".
+- If a cited document does not expose Điều/Khoản/Điểm, still cite the file name and available source marker/chunk.
+- Do not invent sources, file names, or article numbers. If source metadata is missing, write "Không rõ nguồn cụ thể trong context".
+- Never show internal reasoning, checklists, drafts, "User Question", "Constraints", "Draft", or answer-quality notes. Return only the final user-facing answer.
+"""
+
+    enhanced_prompt = react_prompt.format(tool_descriptions=tool_descriptions) + few_shot_examples + permission_rules + citation_rules
     
     prompt = ChatPromptTemplate.from_messages(
         [("system", enhanced_prompt),

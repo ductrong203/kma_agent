@@ -54,6 +54,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         )
     
     # Kiểm tra password
+    if user.get("is_active", True) is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tai khoan da bi khoa. Vui long lien he quan tri vien.",
+        )
+
     if not verify_password(form_data.password, user["password_hash"], user["salt"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

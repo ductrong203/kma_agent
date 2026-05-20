@@ -875,10 +875,10 @@ const RagManagement = () => {
   return (
     <>
       <div className="rag-management">
-        <h2>Quản lý Tài liệu RAG</h2>
+        <h2>Quản lý Tài liệu Graph RAG</h2>
         <p className="description">
-          Quản lý các tài liệu để huấn luyện hệ thống truy vấn tài liệu (RAG)
-          cho chatbot.
+          Quản lý các tài liệu để huấn luyện hệ thống truy vấn tài liệu (Graph
+          RAG) cho chatbot.
         </p>
 
         {message && <div className={`message ${messageType}`}>{message}</div>}
@@ -1121,7 +1121,7 @@ const RagManagement = () => {
             </div>
 
             <div className="rebuild-section">
-              <h3>Xây dựng lại chỉ mục RAG</h3>
+              <h3>Xây dựng lại chỉ mục Graph RAG</h3>
 
               {/* Button for full rebuild */}
               <div className="rebuild-option full-rebuild-section">

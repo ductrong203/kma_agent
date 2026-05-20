@@ -4,8 +4,79 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FiUser, FiAlertCircle } from "react-icons/fi";
 import { MESSAGE_SENDERS } from "../utils/constants";
+import { prettifyMarkdownContent } from "../utils/textUtils";
 import RateLimitMessage from "./RateLimitMessage";
 import "./ChatArea.css";
+
+const formatMathExpression = (value) => {
+  if (!value) return "";
+
+  return String(value)
+    .replace(/\\text\{([^{}]*)\}/g, "$1")
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, "($1)/($2)")
+    .replace(/\\times/g, "\u00d7")
+    .replace(/\\cdot/g, "\u00b7")
+    .replace(/\\geq?/g, "\u2265")
+    .replace(/\\leq?/g, "\u2264")
+    .replace(/\\neq/g, "\u2260")
+    .replace(/\\approx/g, "\u2248")
+    .replace(/\\rightarrow/g, "\u2192")
+    .replace(/\\left|\\right/g, "")
+    .replace(/\\,/g, " ")
+    .replace(/\\([a-zA-Z]+)/g, "$1")
+    .replace(/\^\{([^{}]+)\}/g, "^$1")
+    .replace(/_\{([^{}]+)\}/g, "_$1")
+    .replace(/[{}]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const formatInlineMath = (value) =>
+  String(value || "").replace(/(^|[^$])\$([^$\n]+)\$(?!\$)/g, (_, prefix, math) => {
+    return `${prefix}${formatMathExpression(math)}`;
+  });
+
+const splitMathSegments = (rawText) => {
+  const text = rawText || "";
+  const segments = [];
+  let index = 0;
+  let textStart = 0;
+
+  const pushText = (end) => {
+    if (end > textStart) {
+      segments.push({ type: "text", value: text.slice(textStart, end) });
+    }
+  };
+
+  while (index < text.length) {
+    if (text.startsWith("$$", index)) {
+      const end = text.indexOf("$$", index + 2);
+      if (end === -1) {
+        pushText(index);
+        segments.push({
+          type: "math-block",
+          value: text.slice(index + 2),
+        });
+        textStart = text.length;
+        break;
+      }
+
+      pushText(index);
+      segments.push({
+        type: "math-block",
+        value: text.slice(index + 2, end),
+      });
+      index = end + 2;
+      textStart = index;
+      continue;
+    }
+
+    index += 1;
+  }
+
+  pushText(text.length);
+  return segments.length ? segments : [{ type: "text", value: text }];
+};
 
 const MessageBubble = ({ message }) => {
   const isUser =
@@ -21,7 +92,7 @@ const MessageBubble = ({ message }) => {
   };
 
   // Get the message text - handle both 'text' and 'content' properties
-  const messageText = message.text || message.content || "";
+  const messageText = prettifyMarkdownContent(message.text || message.content || "");
 
   const convertPipeRowsToMarkdownTables = (rawText) => {
     if (!rawText || typeof rawText !== "string") return rawText;
@@ -43,10 +114,31 @@ const MessageBubble = ({ message }) => {
       return (trimmed.match(/\|/g) || []).length >= 2;
     };
 
+    const isTabRow = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      return trimmed.includes("\t") && trimmed.split("\t").filter(Boolean).length >= 2;
+    };
+
+    const isTabSeparatorRow = (line) => {
+      if (!isTabRow(line)) return false;
+      return line
+        .split("\t")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .every((cell) => /^-+$/.test(cell));
+    };
+
     // Parse cells from pipe-separated row
     const parseCells = (line) =>
       line
         .split("|")
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
+
+    const parseTabCells = (line) =>
+      line
+        .split("\t")
         .map((c) => c.trim())
         .filter((c) => c.length > 0);
 
@@ -58,6 +150,32 @@ const MessageBubble = ({ message }) => {
       }
 
       if (!isPipeRow(lines[i])) {
+        if (isTabSeparatorRow(lines[i])) {
+          i += 1;
+          continue;
+        }
+
+        if (isTabRow(lines[i]) && i + 1 < lines.length && isTabSeparatorRow(lines[i + 1])) {
+          const headers = parseTabCells(lines[i]);
+          const rows = [];
+          i += 2;
+
+          while (i < lines.length && isTabRow(lines[i]) && !isTabSeparatorRow(lines[i])) {
+            rows.push(parseTabCells(lines[i]));
+            i += 1;
+          }
+
+          const colCount = Math.max(headers.length, ...rows.map((row) => row.length));
+          output.push(`| ${headers.map((h) => h || "").join(" | ")} |`);
+          output.push(`| ${Array(colCount).fill("---").join(" | ")} |`);
+          rows.forEach((row) => {
+            const normalized = [...row];
+            while (normalized.length < colCount) normalized.push("");
+            output.push(`| ${normalized.join(" | ")} |`);
+          });
+          continue;
+        }
+
         output.push(lines[i]);
         i += 1;
         continue;
@@ -133,33 +251,8 @@ const MessageBubble = ({ message }) => {
     }
   };
 
-  // Helper to split message text by <think> tags
   const renderMessageContent = (text) => {
     if (isUser) return <p>{text}</p>;
-
-    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/gi;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = thinkRegex.exec(text)) !== null) {
-      const beforeStr = text.substring(lastIndex, match.index);
-      if (beforeStr) {
-        parts.push({ type: "text", content: beforeStr });
-      }
-
-      parts.push({ type: "think", content: match[1] });
-      lastIndex = thinkRegex.lastIndex;
-    }
-
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push({ type: "text", content: text.substring(lastIndex) });
-    }
-
-    if (parts.length === 0) {
-      parts.push({ type: "text", content: text });
-    }
 
     const commonComponents = {
       p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -199,9 +292,11 @@ const MessageBubble = ({ message }) => {
         </blockquote>
       ),
       table: ({ children }) => (
-        <table className="markdown-table message-content-table">
-          {children}
-        </table>
+        <div className="message-table-scroll">
+          <table className="markdown-table message-content-table">
+            {children}
+          </table>
+        </div>
       ),
       thead: ({ children }) => <thead>{children}</thead>,
       tbody: ({ children }) => <tbody>{children}</tbody>,
@@ -221,39 +316,27 @@ const MessageBubble = ({ message }) => {
       ),
     };
 
-    return parts.map((part, index) => {
-      if (part.type === "think") {
+    const renderMarkdown = (value, key) => (
+      <ReactMarkdown
+        key={key}
+        remarkPlugins={[remarkGfm]}
+        className="prose prose-sm max-w-none"
+        components={commonComponents}
+      >
+        {formatInlineMath(value)}
+      </ReactMarkdown>
+    );
+
+    return splitMathSegments(prettifyMarkdownContent(text)).map((segment, index) => {
+      if (segment.type === "math-block") {
         return (
-          <details
-            key={index}
-            className="think-block my-2 border border-gray-200 rounded bg-white"
-          >
-            <summary className="cursor-pointer bg-gray-50 p-2 text-xs text-gray-500 font-semibold hover:bg-gray-100 transition-colors select-none">
-              💭 Quá trình suy nghĩ...
-            </summary>
-            <div className="p-3 text-sm text-gray-600 bg-white border-t border-gray-200 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                className="prose prose-sm max-w-none opacity-80"
-                components={commonComponents}
-              >
-                {part.content}
-              </ReactMarkdown>
-            </div>
-          </details>
-        );
-      } else {
-        return (
-          <ReactMarkdown
-            key={index}
-            remarkPlugins={[remarkGfm]}
-            className="prose prose-sm max-w-none"
-            components={commonComponents}
-          >
-            {part.content}
-          </ReactMarkdown>
+          <div className="message-math-block" key={`math-block-${index}`}>
+            {formatMathExpression(segment.value)}
+          </div>
         );
       }
+
+      return renderMarkdown(segment.value, `markdown-${index}`);
     });
   };
 
@@ -291,16 +374,19 @@ const MessageBubble = ({ message }) => {
             <div className="message-attachments">
               {message.attachments.map((attachment, idx) => {
                 const fileName =
-                  attachment.filename || attachment.name || "File";
+                  attachment.filename ||
+                  attachment.original_filename ||
+                  attachment.name ||
+                  "Tệp đính kèm";
                 const fileSize = attachment.size
                   ? `${(attachment.size / 1024).toFixed(1)} KB`
-                  : "N/A";
+                  : "";
                 return (
                   <div key={idx} className="attachment-item">
                     <div className="attachment-icon">📎</div>
                     <div className="attachment-info">
                       <div className="attachment-name">{fileName}</div>
-                      <div className="attachment-size">{fileSize}</div>
+                      {fileSize && <div className="attachment-size">{fileSize}</div>}
                     </div>
                   </div>
                 );

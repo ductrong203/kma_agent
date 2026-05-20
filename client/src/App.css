@@ -50,6 +50,7 @@
 .chat-app-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
   background: var(--surface-dim);
@@ -74,8 +75,9 @@ html.dark .chat-app-layout {
 
 /* ---- Sidebar ---- */
 .chat-app-sidebar {
-  width: 280px;
+  width: 300px;
   height: 100vh;
+  height: 100dvh;
   flex-shrink: 0;
   overflow: hidden;
   z-index: 50;
@@ -94,6 +96,7 @@ html.dark .chat-app-sidebar {
     position: fixed;
     left: 0;
     top: 0;
+    width: min(88vw, 320px);
     transform: translateX(-100%);
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
   }
@@ -115,6 +118,7 @@ html.dark .chat-app-sidebar {
     z-index: 40;
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
 }
 
@@ -125,6 +129,7 @@ html.dark .chat-app-sidebar {
   flex-direction: column;
   min-width: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--surface);
 }
@@ -134,13 +139,14 @@ html.dark .chat-app-sidebar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  height: 56px;
+  padding: 0 18px;
+  height: 60px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--outline-variant);
   background: var(--surface-bright);
   z-index: 30;
   font-family: var(--font-body);
+  gap: 8px;
 }
 
 html.dark .chat-app-topbar {
@@ -161,6 +167,7 @@ html.dark .chat-app-topbar {
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .topbar-menu-btn:hover {
@@ -179,11 +186,41 @@ html.dark .topbar-menu-btn:hover {
   }
 }
 
+/* ---- Mobile Logo (shown only on mobile) ---- */
+.topbar-mobile-logo {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.topbar-mobile-logo img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.topbar-mobile-logo-text {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--kma-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+@media (max-width: 1024px) {
+  .topbar-mobile-logo {
+    display: flex;
+  }
+}
+
 /* Center — Model Selector */
 .topbar-center {
   flex: 1;
   display: flex;
   justify-content: center;
+  min-width: 0;
   padding-left: 0;
 }
 
@@ -260,6 +297,7 @@ html.dark .topbar-nav-btn.active {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 /* ---- Chat Content ---- */
@@ -269,6 +307,7 @@ html.dark .topbar-nav-btn.active {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  padding-inline: clamp(0px, 1.8vw, 24px);
 }
 
 /* ---- Error bar ---- */
@@ -298,11 +337,79 @@ html.dark .chat-app-error {
 .chat-area {
   flex: 1;
   min-height: 0;
-  max-height: calc(100vh - 132px);
-  padding-top: 6px;
-  padding-bottom: 16px;
+  max-height: none;
+  padding: 10px 0 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-messages-stream {
   padding-top: 2px;
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding-inline: 18px;
+}
+
+/* ============================================================
+   MOBILE-FIRST RESPONSIVE — Complete mobile experience
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .chat-app-topbar {
+    height: 52px;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .chat-app-content {
+    padding-inline: 0;
+  }
+
+  .chat-area {
+    padding-top: 4px;
+    padding-bottom: 8px;
+  }
+
+  .chat-messages-stream {
+    padding-inline: 10px;
+  }
+
+  .chat-app-error {
+    padding: 8px 12px;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar-center {
+    justify-content: flex-start;
+  }
+
+  .topbar-nav-btn {
+    padding: 8px;
+  }
+
+  .chat-app-topbar {
+    height: 48px;
+    padding: 0 8px;
+  }
+
+  .topbar-mobile-logo-text {
+    font-size: 0.82rem;
+  }
+
+  .topbar-mobile-logo img {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* ---- Safe area for notched phones ---- */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .chat-app-layout {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .chat-app-topbar {
+    padding-top: env(safe-area-inset-top);
+  }
 }

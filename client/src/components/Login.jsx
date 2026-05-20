@@ -46,6 +46,7 @@ const Login = ({
   const [formData, setFormData] = useState({
     username: "",
     email: "",
+    studentCode: "",
     password: "",
     confirmPassword: "",
   });
@@ -109,25 +110,41 @@ const Login = ({
           !formData.confirmPassword?.trim()
         ) {
           setError("Vui lòng điền đầy đủ thông tin bắt buộc");
+          setIsLoading(false);
           return;
         }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
           setError("Địa chỉ email không hợp lệ");
+          setIsLoading(false);
+          return;
+        }
+        const studentCodeRegex = /^[ACDMT]T\d{6}$/i;
+        if (
+          formData.studentCode?.trim() &&
+          !studentCodeRegex.test(formData.studentCode.trim())
+        ) {
+          setError("Mã sinh viên không hợp lệ. Ví dụ: AT170001");
+          setIsLoading(false);
           return;
         }
         if (formData.password !== formData.confirmPassword) {
           setError("Mật khẩu xác nhận không khớp");
+          setIsLoading(false);
           return;
         }
         if (formData.password.length < 6) {
           setError("Mật khẩu phải có ít nhất 6 ký tự");
+          setIsLoading(false);
           return;
         }
 
         const result = await authService.register({
           username: formData.username,
           email: formData.email,
+          studentCode: formData.studentCode.trim()
+            ? formData.studentCode.trim().toUpperCase()
+            : undefined,
           password: formData.password,
         });
 
@@ -135,6 +152,7 @@ const Login = ({
           setFormData({
             username: "",
             email: "",
+            studentCode: "",
             password: "",
             confirmPassword: "",
           });
@@ -161,6 +179,7 @@ const Login = ({
     setFormData({
       username: "",
       email: "",
+      studentCode: "",
       password: "",
       confirmPassword: "",
     });
@@ -286,6 +305,25 @@ const Login = ({
                   placeholder="Nhập địa chỉ email..."
                   required={!isLoginMode}
                   autoComplete="email"
+                />
+              </div>
+            )}
+
+            {!isLoginMode && (
+              <div className="form-group">
+                <label htmlFor="studentCode" className="form-label">
+                  Mã sinh viên{" "}
+                  <span className="form-label-optional">(không bắt buộc)</span>
+                </label>
+                <input
+                  type="text"
+                  id="studentCode"
+                  name="studentCode"
+                  value={formData.studentCode || ""}
+                  onChange={handleInputChange}
+                  className="form-input"
+                  placeholder="Ví dụ: AT170001"
+                  autoComplete="off"
                 />
               </div>
             )}

@@ -329,13 +329,102 @@ function ChatApp() {
         "Sending message with conversationId:",
         currentConversationId,
       );
-      const response = await chatService.sendMessage(
+      const streamingBotId = uuidv4();
+      let hasReceivedDelta = false;
+      let streamBuffer = "";
+      let visibleStreamText = "";
+      let streamFlushTimer = null;
+
+      const flushStreamText = () => {
+        streamFlushTimer = null;
+        const nextText = streamBuffer;
+        if (nextText === visibleStreamText) return;
+        visibleStreamText = nextText;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingBotId || msg.isStreaming
+              ? { ...msg, content: visibleStreamText }
+              : msg,
+          ),
+        );
+      };
+
+      const scheduleStreamFlush = () => {
+        if (streamFlushTimer) return;
+        streamFlushTimer = setTimeout(flushStreamText, 80);
+      };
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: streamingBotId,
+          content: "Đang xử lý câu hỏi...",
+          sender: "bot",
+          timestamp: new Date().toISOString(),
+          isStreaming: true,
+        },
+      ]);
+
+      const response = await chatService.sendMessageStream(
         currentConversationId,
         messageText,
         selectedFolder === "all" ? null : selectedFolder,
         attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
+        {
+          onStatus: (statusText) => {
+            if (!hasReceivedDelta && statusText) {
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === streamingBotId ? { ...msg, content: statusText } : msg,
+                ),
+              );
+            }
+          },
+          onStart: (metadata) => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingBotId
+                  ? {
+                      ...msg,
+                      id: metadata._id || msg.id,
+                      content: "",
+                      timestamp: metadata.created_at || msg.timestamp,
+                      attachments: metadata.attachments || [],
+                    }
+                  : msg,
+              ),
+            );
+          },
+          onDelta: (chunk) => {
+            hasReceivedDelta = true;
+            streamBuffer += chunk;
+            scheduleStreamFlush();
+          },
+          onDone: (finalMessage) => {
+            if (streamFlushTimer) {
+              clearTimeout(streamFlushTimer);
+              streamFlushTimer = null;
+            }
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === streamingBotId || msg.isStreaming
+                  ? {
+                      ...msg,
+                      id: finalMessage.id || msg.id,
+                      content: finalMessage.content,
+                      timestamp: finalMessage.createdAt || msg.timestamp,
+                      attachments: finalMessage.attachments || [],
+                      isStreaming: false,
+                    }
+                  : msg,
+              ),
+            );
+          },
+        },
       );
       if (response.success) {
+        setError(null);
+      } else if (false) {
         const botMessage = {
           id: uuidv4(),
           content:
@@ -399,6 +488,7 @@ function ChatApp() {
       }
     } catch (error) {
       console.error("Error sending message:", error.message);
+      setMessages((prev) => prev.filter((msg) => !msg.isStreaming));
       let errorText =
         "Xin lỗi, có lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại sau.";
       let isRateLimit = false;
@@ -564,6 +654,7 @@ function ChatApp() {
           onLogout={handleLogout}
           isDarkMode={isDarkMode}
           onToggleDarkMode={toggleDarkMode}
+          onUserUpdate={setUser}
         />
       </aside>
 
@@ -586,6 +677,12 @@ function ChatApp() {
           >
             {isSidebarOpen ? <FiX size={20} /> : <FiMenu size={20} />}
           </button>
+
+          {/* Mobile brand logo — visible only on tablet/phone */}
+          <div className="topbar-mobile-logo">
+            <img src="/img/kma.png" alt="ACTVN" />
+            <span className="topbar-mobile-logo-text">ACTVN-AGENT</span>
+          </div>
 
           <div className="topbar-center">
             <ModelSelector />

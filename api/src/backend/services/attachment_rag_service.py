@@ -298,7 +298,8 @@ class AttachmentRAGService:
         self,
         query: str,
         file_ids: Optional[List[str]] = None,
-        limit: int = 5
+        limit: int = 5,
+        per_file_limit: Optional[int] = None
     ) -> List[Dict]:
         """
         Search for relevant content in attachments
@@ -320,12 +321,13 @@ class AttachmentRAGService:
             all_results = []
             
             if file_ids:
+                effective_per_file_limit = per_file_limit or limit
                 for file_id in file_ids:
                     logger.info(f"Searching file: {file_id}")
                     results = await self.vector_store_service.search_similar(
                         query_embedding=query_embedding,
                         file_id=file_id,
-                        limit=limit,
+                        limit=effective_per_file_limit,
                         threshold=0.0  # Allow all results, then filter
                     )
                     logger.info(f"  Found {len(results)} results from file {file_id}")
@@ -343,7 +345,8 @@ class AttachmentRAGService:
             
             # Sort by similarity and limit
             all_results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
-            all_results = all_results[:limit]
+            if not file_ids:
+                all_results = all_results[:limit]
             
             logger.info(f"🔎 Search found {len(all_results)} relevant chunks after filtering")
             
@@ -357,7 +360,7 @@ class AttachmentRAGService:
         self,
         query: str,
         file_ids: Optional[List[str]] = None,
-        max_context_length: int = 2000
+        max_context_length: int = 12000
     ) -> str:
         """
         Build context string from relevant attachment chunks for RAG
@@ -371,25 +374,54 @@ class AttachmentRAGService:
             Context string formatted for LLM
         """
         try:
-            # Search attachments
-            results = await self.search_attachments(query, file_ids, limit=10)
+            # Search attachments. For multi-file analysis, keep a per-file quota
+            # so one document cannot crowd out the other.
+            results = await self.search_attachments(
+                query,
+                file_ids,
+                limit=24,
+                per_file_limit=18 if file_ids and len(file_ids) > 1 else 24
+            )
             
             if not results:
                 return ""
+
+            results = await self._augment_results_for_document_analysis(query, results, file_ids)
             
             # Build context
             context_parts = []
             current_length = 0
+            file_name_cache = {}
             
             for i, result in enumerate(results, 1):
                 chunk = result.get("text", "")
                 similarity = result.get("similarity", 0)
+                file_id = result.get("file_id")
+
+                if file_id and file_id not in file_name_cache:
+                    try:
+                        file_metadata = await self.file_service.get_file_metadata(file_id)
+                        file_name_cache[file_id] = file_metadata.get(
+                            "original_filename",
+                            file_metadata.get("filename", file_id)
+                        )
+                    except Exception:
+                        file_name_cache[file_id] = file_id or "Unknown"
+
+                filename = file_name_cache.get(file_id, file_id or "Unknown")
                 
                 # Add source reference
-                part = f"[Source {i} - File chunk {result.get('chunk_index', 0)} (Relevance: {similarity:.2f})]:\n{chunk}\n"
+                part = (
+                    f"[Source {i}]\n"
+                    f"File: {filename}\n"
+                    f"File ID: {file_id or 'Unknown'}\n"
+                    f"Chunk: {result.get('chunk_index', 0)}\n"
+                    f"Relevance: {similarity:.2f}\n"
+                    f"{chunk}\n"
+                )
                 
                 if current_length + len(part) > max_context_length:
-                    break
+                    continue
                 
                 context_parts.append(part)
                 current_length += len(part)
@@ -402,6 +434,77 @@ class AttachmentRAGService:
         except Exception as e:
             logger.error(f"Error building context: {str(e)}")
             return ""
+
+    async def _augment_results_for_document_analysis(
+        self,
+        query: str,
+        results: List[Dict],
+        file_ids: Optional[List[str]]
+    ) -> List[Dict]:
+        """Add keyword-rich chunks for paper analysis questions."""
+        if not file_ids:
+            return results
+
+        query_lower = (query or "").lower()
+        analysis_terms = [
+            "phân tích", "ưu", "nhược", "đóng góp", "kết quả", "bảng",
+            "analysis", "advantage", "disadvantage", "limitation",
+            "contribution", "result", "evaluation", "experiment", "table",
+            "methodology", "proposed", "discussion", "conclusion",
+        ]
+        if not any(term in query_lower for term in analysis_terms):
+            return results
+
+        supplemental_terms = [
+            "contribution", "đóng góp", "result", "results", "kết quả",
+            "evaluation", "experiment", "performance", "table", "bảng",
+            "methodology", "proposed", "architecture", "limitation",
+            "advantage", "disadvantage", "discussion", "conclusion",
+        ]
+
+        seen = {(item.get("file_id"), item.get("chunk_index")) for item in results}
+        supplemented = list(results)
+
+        for file_id in file_ids:
+            try:
+                chunks = await self.vector_store_service.get_file_embeddings(file_id)
+            except Exception as exc:
+                logger.warning(f"Could not load all chunks for supplemental scan: {file_id} - {exc}")
+                continue
+
+            keyword_hits = []
+            for chunk in chunks or []:
+                text = chunk.get("text", "")
+                score = sum(1 for term in supplemental_terms if term in text.lower())
+                if score <= 0:
+                    continue
+
+                key = (chunk.get("file_id"), chunk.get("chunk_index"))
+                if key in seen:
+                    continue
+
+                seen.add(key)
+                chunk["similarity"] = 0.45 + min(score, 6) * 0.02
+                keyword_hits.append(chunk)
+
+            keyword_hits.sort(
+                key=lambda item: (
+                    float(item.get("similarity", 0)),
+                    -int(item.get("chunk_index", 0) or 0)
+                ),
+                reverse=True
+            )
+            supplemented.extend(keyword_hits[:6])
+
+        supplemented.sort(
+            key=lambda item: (
+                item.get("file_id", ""),
+                -float(item.get("similarity", 0)),
+                int(item.get("chunk_index", 0) or 0)
+            )
+        )
+        logger.info(f"Augmented attachment context candidates: {len(results)} -> {len(supplemented)} chunks")
+        return supplemented
     
     async def cleanup_file(self, file_id: str) -> bool:
         """Clean up file and its embeddings"""

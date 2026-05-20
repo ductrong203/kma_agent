@@ -246,9 +246,10 @@
 
 import logging
 import os
+import re
 import unicodedata
 from pathlib import Path
-from typing import Literal, Dict, Any
+from typing import Literal, Dict, Any, List
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.graph import MessagesState
@@ -264,6 +265,163 @@ from .semantic_analyzer import analyze_query_semantic_filter
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+DEPARTMENT_LABELS = {
+    "phongdaotao": "Phòng Đào tạo",
+    "phongkhaothi": "Phòng Khảo thí và Đảm bảo chất lượng",
+    "khoa": "Khoa",
+    "viennghiencuuvahoptacphattrien": "Viện Nghiên cứu và Hợp tác phát triển",
+    "thongtinhvktmm": "Thông tin Học viện Kỹ thuật mật mã",
+    "document_graph": "Tài liệu chung",
+}
+
+
+def _clean_source_value(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("\\", "/").strip()
+
+
+def _extract_clause_refs(text: str) -> str:
+    if not text:
+        return ""
+
+    patterns = [
+        r"\bĐiều\s+\d+[a-zA-Z]?(?:\s*[,.;:()/-]?\s*(?:khoản|điểm)\s+[a-zA-Z0-9đĐ]+)?",
+        r"\bKhoản\s+\d+[a-zA-Z]?",
+        r"\bĐiểm\s+[a-zA-ZđĐ]\)",
+        r"\bChương\s+[IVXLCDM\d]+",
+        r"\bMục\s+\d+",
+        r"\bPhụ lục\s+[IVXLCDM\d]+",
+    ]
+
+    refs = []
+    for pattern in patterns:
+        refs.extend(re.findall(pattern, text, flags=re.IGNORECASE))
+
+    seen = set()
+    unique_refs = []
+    for ref in refs:
+        normalized = re.sub(r"\s+", " ", ref.strip())
+        key = normalized.lower()
+        if key not in seen:
+            seen.add(key)
+            unique_refs.append(normalized)
+
+    return ", ".join(unique_refs[:5])
+
+
+def _build_source_entries(docs: List[Any]) -> List[Dict[str, str]]:
+    entries = []
+    seen = set()
+
+    for doc in docs or []:
+        metadata = getattr(doc, "metadata", {}) or {}
+        content = getattr(doc, "page_content", str(doc))
+
+        source_path = (
+            metadata.get("source_path")
+            or metadata.get("full_path")
+            or metadata.get("source")
+            or metadata.get("filename")
+            or ""
+        )
+        filename = (
+            metadata.get("filename")
+            or metadata.get("source")
+            or os.path.basename(_clean_source_value(source_path))
+            or "Không rõ file"
+        )
+        department = (
+            metadata.get("department_vn")
+            or DEPARTMENT_LABELS.get(metadata.get("query_department"))
+            or DEPARTMENT_LABELS.get(metadata.get("department"))
+            or metadata.get("query_department")
+            or metadata.get("department")
+            or "Không rõ ban/phòng"
+        )
+        clause_refs = _extract_clause_refs(content)
+
+        key = (
+            str(filename).lower(),
+            str(department).lower(),
+            clause_refs.lower(),
+            str(metadata.get("chunk_index", "")).lower(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+
+        entries.append({
+            "filename": str(filename),
+            "source_path": _clean_source_value(source_path or filename),
+            "department": str(department),
+            "clause_refs": clause_refs,
+            "chunk_index": str(metadata.get("chunk_index", "")),
+        })
+
+    return entries
+
+
+def _format_source_entries(entries: List[Dict[str, str]], max_entries: int = 5) -> str:
+    if not entries:
+        return ""
+
+    lines = []
+    for index, entry in enumerate(entries[:max_entries], start=1):
+        detail_parts = [f"file: {entry['filename']}", f"ban/phòng: {entry['department']}"]
+        if entry.get("clause_refs"):
+            detail_parts.append(f"vị trí: {entry['clause_refs']}")
+        if entry.get("source_path") and entry["source_path"] != entry["filename"]:
+            detail_parts.append(f"đường dẫn: {entry['source_path']}")
+        lines.append(f"{index}. " + "; ".join(detail_parts))
+
+    return "\n".join(lines)
+
+
+def _ensure_source_footer(answer: str, source_entries: List[Dict[str, str]]) -> str:
+    answer = str(answer or "").strip()
+    if not source_entries:
+        return answer
+
+    if re.search(r"(?im)^\s*(\*\*)?(nguồn|nguá»“n)\b", answer):
+        return answer
+
+    return f"{answer}\n\n**Nguồn:**\n{_format_source_entries(source_entries)}"
+
+
+def _strip_response_reasoning(answer: Any) -> str:
+    text = str(answer or "").strip()
+    if not text:
+        return ""
+
+    text = re.sub(r"<think(?:ing)?>[\s\S]*?(?:</think(?:ing)?>|$)", "", text, flags=re.IGNORECASE).strip()
+
+    marker_patterns = [
+        r"Source included\?\s*Yes\.\s*",
+        r"Nguồn included\?\s*Yes\.\s*",
+        r"Draft:\s*",
+    ]
+    for pattern in marker_patterns:
+        matches = list(re.finditer(pattern, text, flags=re.IGNORECASE))
+        if matches:
+            text = text[matches[-1].end():].strip()
+            break
+
+    if re.search(r"(?im)^\s*(User Question|Role:|Constraints:|Professional,\s*Markdown\?|Concise\?|No greetings\?)", text):
+        source_match = re.search(r"(?im)^\s*(?:\*\*)?(?:Nguồn|Nguá»“n)\s*:", text)
+        if source_match:
+            before_source = text[:source_match.start()].strip()
+            paragraphs = [part.strip() for part in re.split(r"\n\s*\n", before_source) if part.strip()]
+            if paragraphs:
+                text = paragraphs[-1] + "\n\n" + text[source_match.start():].strip()
+
+    text = re.sub(
+        r"(?im)^\s*(User Question|Role:|Constraints:|Professional,\s*Markdown\?|Concise\?|No greetings\?|Other sources|Is a watch listed|Does the text explicitly say|However, the rule says|Anything else is only allowed|Additionally, if a watch).*$",
+        "",
+        text,
+    )
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 # Global cache for GraphRAG components (initialized once)
 _GRAPH_CACHE = None
@@ -318,15 +476,48 @@ async def process_kma_query(query: str, retriever=None, llm=None) -> Dict[str, A
     else:
         docs = retriever.get_relevant_documents(query)
 
-    # Combine document content
-    context = "\n\n".join([doc.page_content for doc in docs])
+    source_entries = _build_source_entries(docs)
+    source_catalog = _format_source_entries(source_entries, max_entries=10)
+
+    # Combine document content with explicit source headers so the model can cite them.
+    context_parts = []
+    for index, doc in enumerate(docs, start=1):
+        metadata = getattr(doc, "metadata", {}) or {}
+        content = getattr(doc, "page_content", str(doc))
+        entry = source_entries[index - 1] if index - 1 < len(source_entries) else {}
+        source_header = [
+            f"[Nguồn {index}]",
+            f"File: {entry.get('filename') or metadata.get('filename') or metadata.get('source') or 'Không rõ file'}",
+            f"Ban/phòng: {entry.get('department') or metadata.get('department_vn') or metadata.get('department') or 'Không rõ ban/phòng'}",
+        ]
+        if entry.get("clause_refs"):
+            source_header.append(f"Điều/khoản/điểm phát hiện: {entry['clause_refs']}")
+        context_parts.append("\n".join(source_header) + "\n" + content)
+
+    context = "\n\n".join(context_parts)
 
     # Generate answer
-    prompt = generate_prompt.format(question=query, context=context)
+    prompt = generate_prompt.format(
+        question=query,
+        context=context,
+        source_catalog=source_catalog or "Không có metadata nguồn rõ ràng."
+    )
     response = llm.invoke([{"role": "user", "content": prompt}])
+    response_content = response.content
+    if isinstance(response_content, list):
+        if response_content and isinstance(response_content[0], dict) and "text" in response_content[0]:
+            response_content = "".join([part.get("text", "") for part in response_content if isinstance(part, dict)])
+        else:
+            response_content = " ".join([str(part) for part in response_content])
+    elif not isinstance(response_content, str):
+        response_content = str(response_content)
+    response_content = _ensure_source_footer(_strip_response_reasoning(response_content), source_entries)
 
     # Return the answer and sources
-    return {"answer": response.content, "sources": [doc.page_content for doc in docs[:3]]  # Return top 3 sources
+    return {
+        "answer": response_content,
+        "sources": [doc.page_content for doc in docs[:3]],
+        "source_metadata": source_entries[:5],
     }
 
 
@@ -455,8 +646,25 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
         retrieval_method = "fallback"
         decision = None
 
-    # Combine document content
-    context = "\n\n".join([doc.page_content for doc in docs])
+    source_entries = _build_source_entries(docs)
+    source_catalog = _format_source_entries(source_entries, max_entries=10)
+
+    # Combine document content with explicit source headers so the model can cite them.
+    context_parts = []
+    for index, doc in enumerate(docs, start=1):
+        metadata = getattr(doc, "metadata", {}) or {}
+        content = getattr(doc, "page_content", str(doc))
+        entry = source_entries[index - 1] if index - 1 < len(source_entries) else {}
+        source_header = [
+            f"[Nguồn {index}]",
+            f"File: {entry.get('filename') or metadata.get('filename') or metadata.get('source') or 'Không rõ file'}",
+            f"Ban/phòng: {entry.get('department') or metadata.get('department_vn') or metadata.get('department') or 'Không rõ ban/phòng'}",
+        ]
+        if entry.get("clause_refs"):
+            source_header.append(f"Điều/khoản/điểm phát hiện: {entry['clause_refs']}")
+        context_parts.append("\n".join(source_header) + "\n" + content)
+
+    context = "\n\n".join(context_parts)
     
     logger.info(f"📝 Context length: {len(context)} chars, {len(docs)} documents")
     
@@ -472,7 +680,11 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     logger.info(f"📄 Context preview (first 300 chars): {context[:300]}...")
 
     # Generate answer
-    prompt = generate_prompt.format(question=query, context=context)
+    prompt = generate_prompt.format(
+        question=query,
+        context=context,
+        source_catalog=source_catalog or "Không có metadata nguồn rõ ràng."
+    )
     logger.info(f"📋 Prompt length: {len(prompt)} chars")
     
     # Log which LLM model will be used
@@ -512,6 +724,8 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     elif not isinstance(response_content, str):
         response_content = str(response_content)
     
+    response_content = _ensure_source_footer(_strip_response_reasoning(response_content), source_entries)
+
     logger.info(f"✅ LLM response received, length: {len(response_content)} chars")
     logger.info(f"📝 Response preview: {response_content[:200]}...")
     
@@ -520,6 +734,7 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
         return {
             "answer": "Xin lỗi, không thể tạo câu trả lời từ thông tin tìm được.",
             "sources": [doc.page_content for doc in docs[:3]],
+            "source_metadata": source_entries[:5],
             "retrieval_method": retrieval_method,
             "department_decision": getattr(locals(), 'decision', None)
         }
@@ -528,6 +743,7 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
     result = {
         "answer": response_content,
         "sources": [doc.page_content for doc in docs[:3]],
+        "source_metadata": source_entries[:5],
         "retrieval_method": retrieval_method
     }
     

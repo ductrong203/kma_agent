@@ -2,7 +2,7 @@
    ACTVN-AGENT — AppBar (TopNavBar)
    Reference-matching: blur bg, nav tabs, icon actions
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap");
 
 .app-bar {
   position: fixed;
@@ -17,12 +17,12 @@
   background: rgba(248, 249, 251, 0.8);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(0,0,0,0.04);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 html.dark .app-bar {
   background: rgba(15, 17, 21, 0.8);
-  border-bottom-color: rgba(255,255,255,0.04);
+  border-bottom-color: rgba(255, 255, 255, 0.04);
 }
 
 .app-bar-content {
@@ -37,16 +37,18 @@ html.dark .app-bar {
 .logo-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .logo-section .logo {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
   border: none;
   padding: 0;
   border-radius: 0;
+  flex-shrink: 0;
 }
 
 .title-section {
@@ -56,7 +58,7 @@ html.dark .app-bar {
 }
 
 .main-title {
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 1.2rem;
   font-weight: 800;
   color: #bb0013;
@@ -64,9 +66,13 @@ html.dark .app-bar {
   letter-spacing: -0.5px;
 }
 
-html.dark .main-title { color: #ed1c24; }
+html.dark .main-title {
+  color: #ed1c24;
+}
 
-.sub-title { display: none; }
+.sub-title {
+  display: none;
+}
 
 /* Nav Tabs */
 .mode-switcher {
@@ -74,7 +80,7 @@ html.dark .main-title { color: #ed1c24; }
   align-items: center;
   gap: 24px;
   margin-left: 32px;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-weight: 600;
   letter-spacing: -0.3px;
 }
@@ -86,7 +92,7 @@ html.dark .main-title { color: #ed1c24; }
   padding: 4px 0;
   border: none;
   background: none;
-  font-family: 'Manrope', sans-serif;
+  font-family: "Manrope", sans-serif;
   font-size: 0.88rem;
   font-weight: 600;
   color: #64748b;
@@ -96,7 +102,9 @@ html.dark .main-title { color: #ed1c24; }
   border-radius: 0;
 }
 
-.mode-btn:hover { color: #bb0013; }
+.mode-btn:hover {
+  color: #bb0013;
+}
 
 .mode-btn.active {
   color: #bb0013;
@@ -129,7 +137,9 @@ html.dark .main-title { color: #ed1c24; }
   gap: 4px;
 }
 
-.welcome-text { display: none; }
+.welcome-text {
+  display: none;
+}
 
 .admin-link,
 .logout-btn {
@@ -152,21 +162,25 @@ html.dark .main-title { color: #ed1c24; }
 .admin-link svg,
 .logout-btn svg,
 .admin-link .react-icon,
-.logout-btn .react-icon { display: block; }
+.logout-btn .react-icon {
+  display: block;
+}
 
 .admin-link:hover,
 .logout-btn:hover {
-  background: rgba(0,0,0,0.04);
+  background: rgba(0, 0, 0, 0.04);
   color: #bb0013;
 }
 
 html.dark .admin-link:hover,
 html.dark .logout-btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: #ed1c24;
 }
 
-.guest-text { display: none; }
+.guest-text {
+  display: none;
+}
 
 /* Model Info Badge */
 .model-info-badge {
@@ -177,7 +191,7 @@ html.dark .logout-btn:hover {
   background: rgba(187, 0, 19, 0.06);
   border: 1px solid rgba(187, 0, 19, 0.12);
   border-radius: 8px;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 0.7rem;
   font-weight: 600;
   color: #bb0013;
@@ -194,8 +208,13 @@ html.dark .logout-btn:hover {
 }
 
 @keyframes model-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 html.dark .model-info-badge {
@@ -206,13 +225,27 @@ html.dark .model-info-badge {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .app-bar { padding: 0 12px; height: 56px; }
-  .mode-switcher { gap: 16px; margin-left: 16px; }
-  .mode-btn { font-size: 0.8rem; }
-  .model-info-badge { display: none; }
+  .app-bar {
+    padding: 0 12px;
+    height: 56px;
+  }
+  .mode-switcher {
+    gap: 16px;
+    margin-left: 16px;
+  }
+  .mode-btn {
+    font-size: 0.8rem;
+  }
+  .model-info-badge {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
-  .mode-switcher { display: none; }
-  .main-title { font-size: 1rem; }
+  .mode-switcher {
+    display: none;
+  }
+  .main-title {
+    font-size: 1rem;
+  }
 }

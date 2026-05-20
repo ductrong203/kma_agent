@@ -320,6 +320,58 @@ Nội dung:
         
         logger.info(f"✅ Generated enhanced metadata for {len(self.subgraphs)} communities")
         logger.info(f"💡 Using weighted centroids based on node degree + content length")
+
+    def generate_centroids_from_embeddings(self):
+        """
+        Build community centroids from cached node embeddings without calling the LLM.
+        Used in load mode, where communities are detected but summaries are not regenerated.
+        """
+        if not self.subgraphs:
+            logger.warning("No subgraphs available for centroid generation")
+            return
+
+        if not hasattr(self, 'community_metadata'):
+            self.community_metadata = {}
+
+        generated = 0
+        for comm_id, node_ids in self.subgraphs.items():
+            embeddings = []
+            weights = []
+            categories = []
+
+            for node_id in node_ids:
+                if node_id not in self.graph.nodes:
+                    continue
+
+                node = self.graph.nodes[node_id]
+                metadata = node.get('metadata', {})
+                category = metadata.get('category', '')
+                if category and category not in categories:
+                    categories.append(category)
+
+                embedding = node.get('embedding')
+                if embedding is None:
+                    continue
+
+                embeddings.append(embedding)
+                degree = self.graph.degree(node_id)
+                content_len = len(node.get('content', ''))
+                weights.append(np.log(degree + 1) * np.log(content_len + 1))
+
+            self.community_metadata[comm_id] = {
+                'categories': categories,
+                'node_count': len(node_ids)
+            }
+
+            if not embeddings:
+                continue
+
+            weights = np.array(weights)
+            weights = weights / weights.sum() if weights.sum() > 0 else np.ones_like(weights) / len(weights)
+            self.community_centroids[comm_id] = np.average(embeddings, axis=0, weights=weights)
+            generated += 1
+
+        logger.info(f"Generated {generated}/{len(self.subgraphs)} community centroids from cached embeddings")
     
     def get_subgraph(self, subgraph_id: Any) -> Set[int]:
         """Get node IDs in a subgraph"""

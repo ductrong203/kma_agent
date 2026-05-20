@@ -86,6 +86,11 @@ class Database:
                 params.append(filter.subject_id)
                 param_index += 1
 
+            if filter.subject_name:
+                query += f" AND lower(su.subject_name) ILIKE lower(${param_index})"
+                params.append(f"%{filter.subject_name}%")
+                param_index += 1
+
             query += " ORDER BY s.semester DESC, su.subject_name"
 
             # Execute query

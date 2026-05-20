@@ -133,6 +133,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
         
         if user is None:
             raise credentials_exception
+        if user.get("is_active", True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tai khoan da bi khoa. Vui long lien he quan tri vien.",
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

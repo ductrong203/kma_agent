@@ -13,6 +13,7 @@ import "./ConversationLogs.css";
 import userService from "../../services/userService";
 import httpClient from "../../utils/httpClient";
 import constants from "../../utils/constants";
+import { normalizeTextContent } from "../../utils/textUtils";
 
 const ConversationLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -169,23 +170,24 @@ const ConversationLogs = () => {
             const totalTokens = messages
               .filter((m) => !m.is_user)
               .reduce((sum, m) => {
+                const content = normalizeTextContent(m.content);
                 // Estimate token count (4 chars per token)
-                const tokens = Math.ceil(m.content.length / 4);
+                const tokens = Math.ceil(content.length / 4);
                 return sum + tokens;
               }, 0);
 
             // Check if any errors in conversation
             const hasError = messages.some(
               (m) =>
-                m.content.toLowerCase().includes("error") ||
-                m.content.toLowerCase().includes("lỗi"),
+                normalizeTextContent(m.content).toLowerCase().includes("error") ||
+                normalizeTextContent(m.content).toLowerCase().includes("lỗi"),
             );
 
             // Generate conversation title from first user message or use date
             let title = "Cuộc hội thoại";
             const firstUserMessage = messages.find((m) => m.is_user);
             if (firstUserMessage && firstUserMessage.content) {
-              title = firstUserMessage.content.substring(0, 50).trim();
+              title = normalizeTextContent(firstUserMessage.content).substring(0, 50).trim();
               if (title.length === 50) title += "...";
             } else {
               // If no messages, use date
@@ -228,9 +230,9 @@ const ConversationLogs = () => {
               messages: messages.map((m) => ({
                 id: m._id,
                 sender: m.is_user ? "user" : "bot",
-                content: m.content,
+                content: normalizeTextContent(m.content),
                 timestamp: m.created_at,
-                tokens: m.is_user ? 0 : Math.ceil(m.content.length / 4), // Estimate tokens
+                tokens: m.is_user ? 0 : Math.ceil(normalizeTextContent(m.content).length / 4), // Estimate tokens
               })),
             };
           });
@@ -246,7 +248,7 @@ const ConversationLogs = () => {
               log.username.toLowerCase().includes(search.toLowerCase()) ||
               log.title.toLowerCase().includes(search.toLowerCase()) ||
               log.messages.some((m) =>
-                m.content.toLowerCase().includes(search.toLowerCase()),
+                normalizeTextContent(m.content).toLowerCase().includes(search.toLowerCase()),
               )
             );
           });
@@ -382,7 +384,7 @@ const ConversationLogs = () => {
       search &&
       !log.username.includes(search) &&
       !log.messages.some((m) =>
-        m.content.toLowerCase().includes(search.toLowerCase()),
+        normalizeTextContent(m.content).toLowerCase().includes(search.toLowerCase()),
       )
     ) {
       return false;

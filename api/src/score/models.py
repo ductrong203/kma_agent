@@ -35,6 +35,7 @@ class ScoreFilter(BaseModel):
     student_code: Optional[str] = None
     semester: Optional[str] = None
     subject_id: Optional[int] = None
+    subject_name: Optional[str] = None
     
     @validator('semester')
     def validate_semester_format(cls, value):

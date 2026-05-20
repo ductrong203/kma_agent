@@ -43,6 +43,21 @@ class DepartmentGraphManager:
             'thongtinhvktmm': ['thongtin', 'hvktmm', 'hoc_vien'],
             'document_graph': ['giao_trinh', 'chung']  # Tài liệu chung
         }
+
+    def _hydrate_partitioner_metadata(self, partitioner: SubgraphPartitioner, graph_builder: DocumentGraph):
+        """Restore or rebuild community metadata needed for semantic routing."""
+        partitioner.community_summaries = getattr(graph_builder, 'community_summaries', {}) or {}
+        partitioner.community_centroids = getattr(graph_builder, 'community_centroids', {}) or {}
+        partitioner.community_metadata = getattr(partitioner, 'community_metadata', {})
+
+        if not partitioner.community_centroids:
+            logger.info("Community centroids missing in saved graph; regenerating from cached node embeddings")
+            partitioner.generate_centroids_from_embeddings()
+
+        logger.info(
+            f"Community routing metadata: {len(partitioner.community_centroids)} centroids, "
+            f"{len(partitioner.community_summaries)} summaries"
+        )
     
     def detect_department_from_path(self, file_path: str) -> str:
         """
@@ -306,6 +321,7 @@ class DepartmentGraphManager:
                     # Run community detection without summary generation (load mode)
                     logger.info(f"🏘️ Loading community detection for document_graph...")
                     partitioner.partition_by_community_detection(generate_summaries=False)
+                    self._hydrate_partitioner_metadata(partitioner, graph_builder)
                     logger.info(f"   ✅ Loaded {len(partitioner.communities)} communities")
                     
                     retriever = GraphRoutedRetriever(
@@ -362,6 +378,7 @@ class DepartmentGraphManager:
                     # Run community detection without summary generation (load mode)
                     logger.info(f"🏘️ Loading community detection for {dept}...")
                     partitioner.partition_by_community_detection(generate_summaries=False)
+                    self._hydrate_partitioner_metadata(partitioner, graph_builder)
                     logger.info(f"   ✅ Loaded {len(partitioner.communities)} communities")
                     
                     retriever = GraphRoutedRetriever(
@@ -396,7 +413,7 @@ class DepartmentGraphManager:
         query: str,
         user_metadata: Dict[str, Any] = None,
         k: int = 5
-    ) -> Tuple[List[str], DepartmentDecision]:
+    ) -> Tuple[List, DepartmentDecision]:
         """
         Enhanced query method sử dụng semantic department detection
         
@@ -432,10 +449,13 @@ class DepartmentGraphManager:
         try:
             retriever = self.department_retrievers[target_dept]
             results = retriever._get_relevant_documents(query)
+            for doc in results:
+                if hasattr(doc, "metadata"):
+                    doc.metadata["query_department"] = target_dept
             
             logger.info(f"✅ Retrieved {len(results)} results from {target_dept}")
             
-            return [doc.page_content for doc in results[:k]], decision
+            return results[:k], decision
             
         except Exception as e:
             logger.error(f"❌ Error querying {target_dept}: {e}")
@@ -447,7 +467,10 @@ class DepartmentGraphManager:
                 try:
                     retriever = self.department_retrievers['document_graph']
                     results = retriever._get_relevant_documents(query)
-                    return [doc.page_content for doc in results[:k]], decision
+                    for doc in results:
+                        if hasattr(doc, "metadata"):
+                            doc.metadata["query_department"] = "document_graph"
+                    return results[:k], decision
                 except Exception as e2:
                     logger.error(f"❌ Fallback also failed: {e2}")
             

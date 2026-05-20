@@ -1,23 +1,27 @@
 import constants from "../utils/constants";
 import httpClient from "../utils/httpClient";
+import { normalizeTextContent } from "../utils/textUtils";
+import * as jwtHelper from "../utils/jwtHelper";
 
-const { API_ENDPOINTS } = constants;
+const { API_BASE_URL, API_ENDPOINTS } = constants;
+
+const parseSSEPayload = (rawPayload) => {
+  const event = rawPayload.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "message";
+  const dataLines = rawPayload
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trim());
+  const data = dataLines.length > 0 ? JSON.parse(dataLines.join("\n")) : {};
+  return { event, data };
+};
 
 const chatService = {
   // Department-specific query
   queryDepartment: async (query, department) => {
     try {
-      // Get current user info for context
-      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
-
       const headers = {
         "Content-Type": "application/json",
       };
-
-      // Add student_code to header if available
-      if (userInfo.student_code) {
-        headers["student_code"] = userInfo.student_code;
-      }
 
       const response = await httpClient.post(
         `${API_ENDPOINTS.DEPARTMENT_QUERY}?department=${encodeURIComponent(department)}`,
@@ -32,7 +36,7 @@ const chatService = {
           success: true,
           message: {
             id: `dept_${Date.now()}`, // Generate unique ID for department response
-            content: response.data.content,
+            content: normalizeTextContent(response.data.content),
             isUser: false, // This is a bot response
             createdAt: response.data.created_at,
           },
@@ -81,7 +85,7 @@ const chatService = {
 
       return {
         success: true,
-        answer: response.answer,
+        answer: normalizeTextContent(response.answer),
         sources: response.sources,
         file: response.file,
         timestamp: response.timestamp,
@@ -200,13 +204,9 @@ const chatService = {
   // Quick chat without saving conversation
   sendQuickMessage: async (message, department = null) => {
     try {
-      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
       const headers = {
         "Content-Type": "application/json",
       };
-      if (userInfo.student_code) {
-        headers["student_code"] = userInfo.student_code;
-      }
 
       const response = await httpClient.post(
         API_ENDPOINTS.QUICK_CHAT,
@@ -222,7 +222,7 @@ const chatService = {
           success: true,
           message: {
             id: response.data._id || `quick_${Date.now()}`, // Thêm ID mặc định nếu API không cung cấp
-            content: response.data.content,
+            content: normalizeTextContent(response.data.content),
             isUser: response.data.is_user || false,
             createdAt: response.data.created_at,
           },
@@ -294,7 +294,7 @@ const chatService = {
             title: conv.title,
             createdAt: conv.created_at,
             updatedAt: conv.updated_at,
-            preview: conv.preview || "", // Include preview text
+            preview: normalizeTextContent(conv.preview), // Include preview text
           })),
         };
       } else {
@@ -322,7 +322,7 @@ const chatService = {
           success: true,
           messages: response.data.map((msg) => ({
             id: msg._id,
-            content: msg.content,
+            content: normalizeTextContent(msg.content),
             isUser: msg.is_user,
             createdAt: msg.created_at,
             attachments: msg.attachments || [],
@@ -362,17 +362,9 @@ const chatService = {
       }
 
       // Otherwise use regular conversation messaging
-      // Get current user info for context
-      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "{}");
-
       const headers = {
         "Content-Type": "application/json",
       };
-
-      // Add student_code to header if available
-      if (userInfo.student_code) {
-        headers["student_code"] = userInfo.student_code;
-      }
 
       const requestBody = {
         content: message,
@@ -400,7 +392,7 @@ const chatService = {
           success: true,
           message: {
             id: response.data._id,
-            content: response.data.content,
+            content: normalizeTextContent(response.data.content),
             isUser: response.data.is_user,
             createdAt: response.data.created_at,
             attachments: response.data.attachments,
@@ -430,6 +422,105 @@ const chatService = {
         error: error.message,
       };
     }
+  },
+
+  sendMessageStream: async (
+    conversationId,
+    message,
+    department = null,
+    attachments = null,
+    handlers = {},
+  ) => {
+    const requestBody = {
+      content: message,
+      is_user: true,
+    };
+
+    if (department) {
+      requestBody.department = department;
+    }
+
+    if (attachments && attachments.length > 0) {
+      requestBody.attachments = attachments;
+    }
+
+    const accessToken = jwtHelper.getAccessToken();
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat/${conversationId}/messages/stream`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(requestBody),
+      },
+    );
+
+    if (!response.ok || !response.body) {
+      let errorData = {};
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        errorData = { message: response.statusText };
+      }
+      const error = new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`);
+      error.response = {
+        status: response.status,
+        statusText: response.statusText,
+        data: errorData,
+      };
+      throw error;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let finalMessage = null;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() || "";
+
+      for (const rawEvent of events) {
+        if (!rawEvent.trim()) continue;
+        const { event, data } = parseSSEPayload(rawEvent);
+
+        if (event === "status") {
+          handlers.onStatus?.(data.message || "");
+        } else if (event === "message_start") {
+          handlers.onStart?.(data);
+        } else if (event === "delta") {
+          handlers.onDelta?.(data.content || "");
+        } else if (event === "done") {
+          finalMessage = {
+            id: data._id,
+            content: normalizeTextContent(data.content),
+            isUser: data.is_user,
+            createdAt: data.created_at,
+            attachments: data.attachments || [],
+          };
+          handlers.onDone?.(finalMessage);
+        } else if (event === "error") {
+          const error = new Error(data.message || "Streaming failed");
+          error.response = {
+            status: data.status || 500,
+            data,
+          };
+          handlers.onError?.(error);
+          throw error;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: finalMessage,
+    };
   },
 
   // Update conversation title

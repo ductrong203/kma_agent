@@ -102,6 +102,40 @@ class UserService {
     }
   }
 
+  async updateOwnProfile(profileData) {
+    try {
+      const response = await httpClient.put('/api/users/me/profile', profileData);
+      return {
+        success: true,
+        data: response.data,
+        message: response.message || 'Cập nhật thông tin cá nhân thành công'
+      };
+    } catch (error) {
+      console.error('Lỗi khi cập nhật thông tin cá nhân:', error);
+      return {
+        success: false,
+        error: error.response?.data?.detail || error.message || 'Lỗi khi cập nhật thông tin cá nhân'
+      };
+    }
+  }
+
+  async changeOwnPassword(passwordData) {
+    try {
+      const response = await httpClient.put('/api/users/me/password', passwordData);
+      return {
+        success: true,
+        data: response.data,
+        message: response.message || 'Đổi mật khẩu thành công'
+      };
+    } catch (error) {
+      console.error('Lỗi khi đổi mật khẩu:', error);
+      return {
+        success: false,
+        error: error.response?.data?.detail || error.message || 'Lỗi khi đổi mật khẩu'
+      };
+    }
+  }
+
   /**
    * Xóa người dùng (chỉ dành cho admin)
    * @param {string} userId - ID của người dùng cần xóa

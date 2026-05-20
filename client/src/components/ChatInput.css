@@ -5,22 +5,16 @@
 
 .chat-input-container {
   background: transparent;
-  padding: 0 20px 18px;
+  padding: 0 clamp(12px, 2vw, 24px) 18px;
   position: relative;
   z-index: 100;
   font-family: var(--font-body);
+  flex-shrink: 0;
 }
 
 /* Gradient fade */
 .chat-input-container::before {
-  content: "";
-  position: absolute;
-  top: -60px;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: linear-gradient(to top, var(--surface), transparent);
-  pointer-events: none;
+  display: none;
 }
 
 html.dark .chat-input-container::before {
@@ -28,7 +22,8 @@ html.dark .chat-input-container::before {
 }
 
 .chat-input-wrapper {
-  max-width: 860px;
+  width: min(100%, 980px);
+  max-width: 980px;
   margin: 0 auto;
   background: var(--surface-bright);
   border: 1px solid var(--outline);
@@ -409,112 +404,6 @@ html.dark .chat-send-btn:disabled {
    ATTACHMENT STYLES
    ============================================================ */
 
-.chat-attachment-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--outline-variant);
-}
-
-.chat-attachment-area.empty {
-  display: none;
-}
-
-.chat-attachments-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 12px;
-}
-
-.chat-attachment-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: var(--surface-secondary);
-  border: 1px solid var(--outline-variant);
-  border-radius: 8px;
-  font-size: 0.85rem;
-  color: var(--on-surface);
-  transition: all 0.2s ease;
-}
-
-.chat-attachment-item:hover {
-  background: var(--kma-primary-10);
-  border-color: var(--kma-primary-20);
-}
-
-.chat-attachment-icon {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--kma-primary);
-  font-weight: 600;
-}
-
-.chat-attachment-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.chat-attachment-size {
-  font-size: 0.75rem;
-  color: var(--on-surface-variant);
-  flex-shrink: 0;
-}
-
-.chat-attachment-remove {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--on-surface-variant);
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  font-size: 14px;
-}
-
-.chat-attachment-remove:hover {
-  background: rgba(194, 24, 91, 0.15);
-  color: var(--kma-primary);
-}
-
-html.dark .chat-attachment-item {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.08);
-  color: var(--on-surface);
-}
-
-html.dark .chat-attachment-item:hover {
-  background: rgba(233, 30, 99, 0.15);
-  border-color: rgba(233, 30, 99, 0.25);
-}
-
-html.dark .chat-attachment-remove:hover {
-  background: rgba(233, 30, 99, 0.2);
-  color: var(--kma-primary-light);
-}
-
-/* File input hidden */
-.chat-file-input {
-  display: none;
-}
-
 /* Attachment button with badge */
 .chat-attach-btn {
   position: relative;
@@ -555,66 +444,6 @@ html.dark .chat-attachment-remove:hover {
 
 .chat-attach-badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--kma-primary);
-  color: white;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(194, 24, 91, 0.35);
-}
-
-html.dark .chat-attach-btn {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--on-surface-variant);
-}
-
-html.dark .chat-attach-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--on-surface);
-}
-
-/* Attachment button */
-.chat-attach-btn {
-  position: relative;
-  height: 36px;
-  width: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  background: var(--surface-tertiary);
-  color: var(--on-surface-variant);
-  font-family: var(--font-body);
-}
-
-.chat-attach-btn:hover:not(:disabled) {
-  background: var(--outline-variant);
-  color: var(--on-surface);
-  transform: scale(1.05);
-}
-
-.chat-attach-btn:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.chat-attach-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chat-attach-badge {
-  position: absolute;
   top: -4px;
   right: -4px;
   background: var(--kma-primary);
@@ -634,7 +463,17 @@ html.dark .chat-attach-badge {
   border-color: var(--surface-secondary);
 }
 
-/* Attachments list */
+html.dark .chat-attach-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--on-surface-variant);
+}
+
+html.dark .chat-attach-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--on-surface);
+}
+
+/* Attachments list (below input) */
 .chat-attachments {
   display: flex;
   flex-direction: column;
@@ -683,6 +522,11 @@ html.dark .chat-attachment-item:hover {
   text-overflow: ellipsis;
 }
 
+.chat-attachment-status {
+  font-size: 0.7rem;
+  color: var(--on-surface-variant);
+}
+
 .chat-attachment-size {
   font-size: 0.75rem;
   color: var(--on-surface-variant);
@@ -712,24 +556,165 @@ html.dark .chat-attachment-item:hover {
   transform: scale(0.9);
 }
 
-/* Responsive */
+/* File input hidden */
+.chat-file-input {
+  display: none;
+}
+
+/* ============================================================
+   MOBILE RESPONSIVE — Chat Input
+   ============================================================ */
+
 @media (max-width: 768px) {
   .chat-input-container {
-    padding: 0 12px 16px;
+    padding: 0 8px 12px;
   }
+
   .chat-input-wrapper {
     border-radius: 16px;
-    padding: 8px 12px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
+    flex-wrap: wrap;
   }
+
+  /* Folder takes a row by itself on mobile */
+  .chat-folder {
+    order: 1;
+    width: 100%;
+    flex-shrink: 1;
+  }
+
+  .chat-folder-trigger {
+    width: 100%;
+    max-width: none;
+    height: 32px;
+    font-size: 0.78rem;
+    padding: 6px 10px;
+  }
+
+  .chat-folder-dot {
+    width: 8px;
+    height: 8px;
+  }
+
+  .chat-folder-popover {
+    width: calc(100vw - 32px);
+    max-height: 50vh;
+    left: 0;
+    border-radius: 12px;
+  }
+
+  .chat-folder-item {
+    padding: 10px;
+  }
+
+  .chat-folder-item-title {
+    font-size: 0.84rem;
+  }
+
+  /* Textarea fills available space */
   .chat-input-textarea {
+    order: 2;
+    flex: 1;
+    min-width: 0;
     font-size: 0.9rem;
     min-height: 36px;
+    max-height: 120px;
+    padding: 6px 4px;
   }
-  .chat-folder-select,
-  .chat-voice-button,
-  .chat-send-btn {
-    min-height: 32px;
+
+  /* Action buttons in a row next to textarea */
+  .chat-attach-btn {
+    order: 3;
     width: 32px;
+    height: 32px;
+  }
+
+  .chat-attach-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .chat-voice-btn {
+    order: 4;
+    width: 32px;
+    height: 32px;
+  }
+
+  .chat-send-btn {
+    order: 5;
+    width: 34px;
+    height: 34px;
+  }
+
+  .chat-send-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Attachments */
+  .chat-attachments {
+    padding: 6px 8px 0;
+    gap: 6px;
+    max-height: 120px;
+  }
+
+  .chat-attachment-item {
+    padding: 6px 10px;
+    gap: 8px;
+    border-radius: 8px;
+  }
+
+  .chat-attachment-name {
+    font-size: 0.78rem;
+  }
+
+  .chat-attachment-status {
+    font-size: 0.65rem;
+  }
+
+  /* Voice indicator */
+  .voice-listening-indicator {
+    font-size: 0.78rem;
+    padding: 6px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-input-container {
+    padding: 0 6px 10px;
+  }
+
+  .chat-input-wrapper {
+    padding: 6px 8px;
+    gap: 4px;
+    border-radius: 14px;
+  }
+
+  .chat-folder-trigger {
+    height: 30px;
+    font-size: 0.75rem;
+  }
+
+  .chat-input-textarea {
+    font-size: 0.88rem;
+  }
+
+  .chat-attach-btn,
+  .chat-voice-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .chat-send-btn {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* Safe area padding for phones with notch */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .chat-input-container {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 }

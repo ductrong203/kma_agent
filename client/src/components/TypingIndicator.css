@@ -122,9 +122,39 @@
 
 @media (max-width: 768px) {
   .typing-wrapper {
-    padding: 8px 16px;
+    padding: 4px 10px;
+    gap: 8px;
+  }
+  .typing-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
   }
   .typing-content {
     padding: 10px 12px;
+    max-width: 240px;
+    border-radius: 4px 14px 14px 14px;
+  }
+  .typing-label {
+    font-size: 0.8rem;
+  }
+  .typing-shimmer-bar {
+    width: 7px;
+    height: 7px;
+  }
+}
+
+@media (max-width: 480px) {
+  .typing-wrapper {
+    padding: 4px 8px;
+  }
+  .typing-avatar {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+  .typing-content {
+    max-width: 200px;
+    padding: 8px 10px;
   }
 }

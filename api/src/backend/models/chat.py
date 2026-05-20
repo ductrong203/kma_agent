@@ -1,8 +1,9 @@
+import json
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from bson import ObjectId
-from pydantic import BaseModel, Field, GetJsonSchemaHandler
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, field_validator
 from pydantic.json_schema import JsonSchemaValue
 
 
@@ -101,12 +102,40 @@ class ConversationCreate(BaseModel):
 class ConversationUpdate(BaseModel):
     title: str
 
+
+def normalize_content(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                parts.append(str(text) if text is not None else json.dumps(item, ensure_ascii=False))
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part)
+    if isinstance(value, dict):
+        text = value.get("text") or value.get("content")
+        return str(text) if text is not None else json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 class MessageResponse(BaseModel):
     id: str = Field(alias="_id")
     content: str
     is_user: bool
     created_at: datetime
     attachments: Optional[List[AttachmentSchema]] = []
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, value: Any) -> str:
+        return normalize_content(value)
     
     model_config = {
         "populate_by_name": True
@@ -115,6 +144,11 @@ class MessageResponse(BaseModel):
 class QuickMessageResponse(BaseModel):
     content: str
     created_at: datetime
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, value: Any) -> str:
+        return normalize_content(value)
 
     model_config = {
         "populate_by_name": True
@@ -127,6 +161,11 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     preview: Optional[str] = None  # First user message preview
+
+    @field_validator("preview", mode="before")
+    @classmethod
+    def validate_preview(cls, value: Any) -> str:
+        return normalize_content(value)
     
     model_config = {
         "populate_by_name": True

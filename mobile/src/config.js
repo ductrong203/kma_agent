@@ -21,6 +21,8 @@ export const ENDPOINTS = {
   listFiles: "/api/files/",
   deleteFile: (fileId) => `/api/files/${fileId}`,
   fileContent: (fileId) => `/api/files/${fileId}/content`,
+  activeModel: "/api/models/active",
+  currentModel: "/api/admin/models/current",
   // Folders
   listFolders: "/api/chat/list-folders",
 };

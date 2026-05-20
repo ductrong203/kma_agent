@@ -1,19 +1,19 @@
 import React, { useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, commonStyles } from "../theme";
 import { authApi } from "../api";
 import KMALogo from "../components/KMALogo";
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "../theme";
 
 const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -22,46 +22,28 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
     password: "",
     confirmPassword: "",
     studentCode: "",
+    studentClass: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const updateForm = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     setError("");
   };
 
   const validateForm = () => {
-    if (!formData.username.trim()) {
-      setError("Vui lòng nhập username");
-      return false;
-    }
-    if (!formData.email.trim()) {
-      setError("Vui lòng nhập email");
-      return false;
-    }
+    if (!formData.username.trim()) return setError("Vui lòng nhập username"), false;
+    if (!formData.email.trim()) return setError("Vui lòng nhập email"), false;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setError("Email không hợp lệ");
-      return false;
+      return setError("Email không hợp lệ"), false;
     }
-    if (!formData.password.trim()) {
-      setError("Vui lòng nhập mật khẩu");
-      return false;
-    }
+    if (!formData.studentCode.trim()) return setError("Vui lòng nhập mã sinh viên"), false;
     if (formData.password.length < 6) {
-      setError("Mật khẩu phải có ít nhất 6 ký tự");
-      return false;
+      return setError("Mật khẩu phải có ít nhất 6 ký tự"), false;
     }
     if (formData.password !== formData.confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp");
-      return false;
-    }
-    if (!formData.studentCode.trim()) {
-      setError("Vui lòng nhập mã sinh viên");
-      return false;
+      return setError("Mật khẩu xác nhận không khớp"), false;
     }
     return true;
   };
@@ -71,10 +53,8 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
 
     setLoading(true);
     setError("");
-
     try {
       const response = await authApi.register(formData);
-
       if (response.success) {
         onRegisterSuccess(response.user);
       } else {
@@ -82,86 +62,97 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
       }
     } catch (err) {
       setError(err.message || "Lỗi kết nối");
-      console.error("Register error:", err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          {/* Header Section */}
-          <View style={styles.headerSection}>
-            <KMALogo size="normal" showText={false} />
-            <Text style={styles.tagline}>ACTVN AI</Text>
-            <Text style={styles.subtitle}>Học viện Kỹ thuật Mật mã</Text>
-            <Text style={styles.description}>Tạo tài khoản mới</Text>
-          </View>
+          <View style={styles.card}>
+            <View style={styles.logoIcon}>
+              <KMALogo size="small" showText={false} />
+            </View>
 
-          {/* Form Section */}
-          <View style={styles.formSection}>
-            {/* Error Message */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Tạo tài khoản ACTVN-AGENT</Text>
+              <Text style={styles.subtitle}>Học viện Kỹ thuật Mật mã</Text>
+            </View>
+
             {error ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
 
-            {/* Username Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Username</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Nhập username"
-                placeholderTextColor={COLORS.onSurfaceVariant}
+                placeholderTextColor={COLORS.outline}
                 value={formData.username}
+                autoCapitalize="none"
                 onChangeText={(text) => updateForm("username", text)}
                 editable={!loading}
               />
             </View>
 
-            {/* Email Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Nhập email"
-                placeholderTextColor={COLORS.onSurfaceVariant}
-                keyboardType="email-address"
+                placeholderTextColor={COLORS.outline}
                 value={formData.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
                 onChangeText={(text) => updateForm("email", text)}
                 editable={!loading}
               />
             </View>
 
-            {/* Student Code Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Mã sinh viên</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Nhập mã sinh viên"
-                placeholderTextColor={COLORS.onSurfaceVariant}
-                value={formData.studentCode}
-                onChangeText={(text) => updateForm("studentCode", text)}
-                editable={!loading}
-              />
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, styles.formHalf]}>
+                <Text style={styles.label}>Mã sinh viên</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="VD: CT060241"
+                  placeholderTextColor={COLORS.outline}
+                  value={formData.studentCode}
+                  autoCapitalize="characters"
+                  onChangeText={(text) => updateForm("studentCode", text)}
+                  editable={!loading}
+                />
+              </View>
+              <View style={[styles.formGroup, styles.formHalf]}>
+                <Text style={styles.label}>Lớp</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="VD: CT6A"
+                  placeholderTextColor={COLORS.outline}
+                  value={formData.studentClass}
+                  onChangeText={(text) => updateForm("studentClass", text)}
+                  editable={!loading}
+                />
+              </View>
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Mật khẩu</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Nhập mật khẩu (tối thiểu 6 ký tự)"
-                placeholderTextColor={COLORS.onSurfaceVariant}
+                placeholder="Tối thiểu 6 ký tự"
+                placeholderTextColor={COLORS.outline}
                 secureTextEntry
                 value={formData.password}
                 onChangeText={(text) => updateForm("password", text)}
@@ -169,13 +160,12 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
               />
             </View>
 
-            {/* Confirm Password Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Xác nhận mật khẩu</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Nhập lại mật khẩu"
-                placeholderTextColor={COLORS.onSurfaceVariant}
+                placeholderTextColor={COLORS.outline}
                 secureTextEntry
                 value={formData.confirmPassword}
                 onChangeText={(text) => updateForm("confirmPassword", text)}
@@ -183,34 +173,25 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
               />
             </View>
 
-            {/* Register Button */}
             <TouchableOpacity
-              style={[styles.registerButton, loading && styles.buttonDisabled]}
+              style={[styles.submitButton, loading && styles.disabledButton]}
               onPress={handleRegister}
               disabled={loading}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color={COLORS.surface} size="small" />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.registerButtonText}>Đăng ký</Text>
+                <Text style={styles.submitText}>Đăng ký</Text>
               )}
             </TouchableOpacity>
 
-            {/* Switch to Login */}
-            <View style={styles.switchSection}>
-              <Text style={styles.switchText}>Đã có tài khoản? </Text>
+            <View style={styles.switchBox}>
+              <Text style={styles.switchText}>Đã có tài khoản?</Text>
               <TouchableOpacity onPress={onSwitchToLogin}>
                 <Text style={styles.switchLink}>Đăng nhập</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Info Section */}
-          <View style={styles.infoSection}>
-            <Text style={styles.infoText}>
-              © 2025 KMA Academy. All rights reserved.
-            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -219,136 +200,138 @@ const RegisterScreen = ({ onRegisterSuccess, onSwitchToLogin }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
     backgroundColor: COLORS.surface,
   },
-
   keyboardView: {
     flex: 1,
   },
-
   scrollContent: {
     flexGrow: 1,
-    padding: SPACING.lg,
-    justifyContent: "space-between",
+    justifyContent: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING["3xl"],
   },
-
-  headerSection: {
+  card: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
+    borderRadius: 24,
+    paddingHorizontal: SPACING["2xl"],
+    paddingVertical: SPACING["3xl"],
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 34,
+    elevation: 6,
+  },
+  logoIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignSelf: "center",
     alignItems: "center",
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
-    gap: SPACING.md,
+    justifyContent: "center",
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.primary,
   },
-
-  logoText: {
-    fontSize: TYPOGRAPHY.fontSize["4xl"],
-    fontWeight: "700",
-    color: COLORS.primary,
+  header: {
+    alignItems: "center",
+    marginBottom: SPACING["2xl"],
+  },
+  title: {
+    color: COLORS.onSurface,
+    fontSize: 23,
+    fontWeight: "800",
+    textAlign: "center",
     marginBottom: SPACING.sm,
   },
-
-  tagline: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: "700",
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-
   subtitle: {
+    color: COLORS.onSurfaceVariant,
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.onSurfaceVariant,
-    marginTop: SPACING.xs,
   },
-
-  description: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    color: COLORS.onSurfaceVariant,
-    marginTop: SPACING.md,
-    fontWeight: "500",
+  errorBox: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
   },
-
-  formSection: {
-    width: "100%",
+  errorText: {
+    color: "#be123c",
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "600",
   },
-
-  inputGroup: {
+  formRow: {
+    flexDirection: "row",
+    gap: SPACING.md,
+  },
+  formHalf: {
+    flex: 1,
+  },
+  formGroup: {
     marginBottom: SPACING.md,
   },
-
   label: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: "600",
     color: COLORS.onSurface,
-    marginBottom: SPACING.xs,
-  },
-
-  input: {
-    ...commonStyles.input,
-    minHeight: 44,
-  },
-
-  errorBox: {
-    backgroundColor: "rgba(244, 67, 54, 0.1)",
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.error,
-  },
-
-  errorText: {
-    color: COLORS.error,
     fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: "500",
+    fontWeight: "700",
+    marginBottom: SPACING.sm,
   },
-
-  registerButton: {
-    backgroundColor: COLORS.primary,
+  input: {
+    minHeight: 50,
+    borderWidth: 1.5,
+    borderColor: COLORS.outlineVariant,
     borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: SPACING.lg,
-    minHeight: 48,
-  },
-
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-
-  registerButtonText: {
-    color: COLORS.surface,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    color: COLORS.onSurface,
     fontSize: TYPOGRAPHY.fontSize.base,
-    fontWeight: "600",
+    paddingHorizontal: SPACING.lg,
   },
-
-  switchSection: {
+  submitButton: {
+    minHeight: 52,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.28,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  disabledButton: {
+    opacity: 0.65,
+  },
+  submitText: {
+    color: "#fff",
+    fontSize: TYPOGRAPHY.fontSize.base,
+    fontWeight: "800",
+  },
+  switchBox: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.outlineVariant,
+    marginTop: SPACING["2xl"],
+    paddingTop: SPACING.lg,
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: SPACING.lg,
+    gap: SPACING.sm,
   },
-
   switchText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.sm,
   },
-
   switchLink: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  infoSection: {
-    alignItems: "center",
-    marginTop: SPACING.lg,
-  },
-
-  infoText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.onSurfaceVariant,
-    textAlign: "center",
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "800",
   },
 });
 

@@ -18,10 +18,10 @@ export const COLORS = {
   accent50: "rgba(124, 77, 255, 0.05)",
 
   // Surfaces
-  surface: "#ffffff",
+  surface: "#fafbfd",
   surfaceBright: "#ffffff",
-  surfaceSecondary: "#fafbfd",
-  surfaceTertiary: "#f5f5f5",
+  surfaceSecondary: "#ffffff",
+  surfaceTertiary: "#f8fafc",
   surfaceDim: "#f0f2f7",
 
   // Text
@@ -29,7 +29,7 @@ export const COLORS = {
   onSurfaceVariant: "#536471",
 
   // Outlines
-  outline: "#c1c7cd",
+  outline: "#8899a6",
   outlineVariant: "#e1e8ed",
 
   // Status
@@ -60,9 +60,9 @@ export const COLORS = {
 export const TYPOGRAPHY = {
   // Font families would be handled by expo-font
   fontFamily: {
-    display: "SpaceGrotesk", // Will be loaded
-    body: "PlusJakartaSans", // Will be loaded
-    mono: "JetBrainsMono", // Will be loaded
+    display: "System",
+    body: "System",
+    mono: "monospace",
   },
 
   // Font sizes
@@ -169,7 +169,7 @@ export const commonStyles = {
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.outlineVariant,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceSecondary,
     color: COLORS.onSurface,
     fontSize: TYPOGRAPHY.fontSize.base,
   },

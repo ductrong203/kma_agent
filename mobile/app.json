@@ -18,7 +18,8 @@
       }
     },
     "android": {
-      "package": "com.actvn.ai.mobile"
+      "package": "com.actvn.ai.mobile",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "extra": {
       "apiBaseUrl": "http://192.168.0.102:8000"

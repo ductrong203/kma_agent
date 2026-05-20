@@ -68,7 +68,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface} />
+      <StatusBar style="dark" backgroundColor={COLORS.surface} />
       {user ? (
         <ChatScreen user={user} onLogout={handleLogout} />
       ) : authMode === "login" ? (

@@ -1,68 +1,94 @@
-import React, { useState, useRef, useEffect } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
-  Dimensions,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, commonStyles } from "../theme";
-import { chatApi } from "../api";
+import OutlineIcon from "../components/OutlineIcon";
+import { chatApi, modelApi } from "../api";
 import ChatHeaderBar from "../components/ChatHeaderBar";
 import ChatSidebar from "../components/ChatSidebar";
-import MessageBubble from "../components/MessageBubble";
 import FileUploadPanel from "../components/FileUploadPanel";
+import MessageBubble from "../components/MessageBubble";
 import UserProfileModal from "../components/UserProfileModal";
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "../theme";
 
-const { width } = Dimensions.get("window");
+const SUGGESTED_QUESTIONS = [
+  "Điều kiện tốt nghiệp của sinh viên là gì?",
+  "Cách tính điểm trung bình tích lũy?",
+  "Quy định đăng ký học phần như thế nào?",
+  "Thủ tục xin nghỉ học cần giấy tờ gì?",
+];
+
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 11) return "Chào buổi sáng";
+  if (hour < 14) return "Chào buổi trưa";
+  if (hour < 18) return "Chào buổi chiều";
+  return "Chào buổi tối";
+};
 
 const ChatScreen = ({ user, onLogout }) => {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 820;
+  const flatListRef = useRef(null);
+
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [fileUploadVisible, setFileUploadVisible] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [userProfileVisible, setUserProfileVisible] = useState(false);
   const [conversations, setConversations] = useState([]);
-  const flatListRef = useRef(null);
+  const [currentUser, setCurrentUser] = useState(user);
+  const [activeModel, setActiveModel] = useState(null);
 
-  // Load conversations on mount
   useEffect(() => {
     loadConversations();
+    loadActiveModel();
+
+    const modelTimer = setInterval(loadActiveModel, 10000);
+    return () => clearInterval(modelTimer);
   }, []);
 
   const loadConversations = async () => {
-    try {
-      const response = await chatApi.getConversations();
-      if (response.success) {
-        setConversations(response.data || []);
-      }
-    } catch (error) {
-      console.error("Error loading conversations:", error);
+    const response = await chatApi.getConversations();
+    if (response.success) {
+      setConversations(response.data || []);
+    }
+  };
+
+  const loadActiveModel = async () => {
+    const response = await modelApi.getActiveModel();
+    if (response.success) {
+      setActiveModel(response.data);
     }
   };
 
   const handleSelectConversation = async (conversation) => {
     setConversationId(conversation.id);
+    setSidebarVisible(false);
     setMessages([]);
 
-    try {
-      const response = await chatApi.getMessages(conversation.id);
-      if (response.success) {
-        setMessages(response.data || []);
-      }
-    } catch (error) {
-      console.error("Error loading messages:", error);
-      Alert.alert("Lỗi", "Không thể tải tin nhắn");
+    const response = await chatApi.getMessages(conversation.id);
+    if (response.success) {
+      setMessages(response.data || []);
+    } else {
+      Alert.alert("Lỗi", response.error || "Không thể tải tin nhắn");
     }
   };
 
@@ -70,199 +96,279 @@ const ChatScreen = ({ user, onLogout }) => {
     setConversationId(null);
     setMessages([]);
     setSelectedFiles([]);
+    setSidebarVisible(false);
+  };
+
+  const handleRenameConversation = async (id, title) => {
+    const response = await chatApi.renameConversation(id, title);
+    if (response.success) {
+      setConversations((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, title } : item)),
+      );
+    } else {
+      Alert.alert("Lỗi", response.error || "Không thể đổi tên");
+    }
+  };
+
+  const handleDeleteConversation = async (id) => {
+    const response = await chatApi.deleteConversation(id);
+    if (response.success) {
+      setConversations((prev) => prev.filter((conv) => conv.id !== id));
+      if (conversationId === id) {
+        handleNewConversation();
+      }
+    } else {
+      Alert.alert("Lỗi", response.error || "Không thể xóa cuộc trò chuyện");
+    }
   };
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() && selectedFiles.length === 0) {
-      return;
-    }
+    if (loading || (!inputText.trim() && selectedFiles.length === 0)) return;
 
-    const messageText = inputText.trim();
+    const content = inputText.trim() || "Hãy phân tích file đã đính kèm.";
+    const pendingFiles = selectedFiles;
+    const userMessageId = `local-${Date.now()}`;
+
     setInputText("");
+    setSelectedFiles([]);
     setLoading(true);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMessageId,
+        role: "user",
+        content,
+        files: pendingFiles,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
 
     try {
       const response = await chatApi.sendMessage({
-        content: messageText,
+        content,
         conversation_id: conversationId,
-        files: selectedFiles,
+        user_id: currentUser.id,
+        files: pendingFiles,
       });
 
-      if (response.success) {
-        // Add user message
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            role: "user",
-            content: messageText,
-            files: selectedFiles,
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-
-        // Set conversation ID if new
-        if (!conversationId && response.conversation_id) {
-          setConversationId(response.conversation_id);
-        }
-
-        // Add assistant message if available
-        if (response.data?.content) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now() + 1,
-              role: "assistant",
-              content: response.data.content,
-              timestamp: new Date().toISOString(),
-            },
-          ]);
-        }
-
-        setSelectedFiles([]);
-        loadConversations();
-      } else {
-        Alert.alert("Lỗi", response.error || "Gửi tin nhắn thất bại");
+      if (!response.success) {
+        throw new Error(response.error || "Gửi tin nhắn thất bại");
       }
+
+      if (!conversationId && response.conversation_id) {
+        setConversationId(response.conversation_id);
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: response.data.id || `assistant-${Date.now()}`,
+          role: "assistant",
+          content: response.data.content,
+          attachments: response.data.attachments,
+          timestamp: response.data.timestamp || new Date().toISOString(),
+        },
+      ]);
+      loadConversations();
     } catch (error) {
-      console.error("Error sending message:", error);
-      Alert.alert("Lỗi", "Lỗi kết nối");
+      Alert.alert("Lỗi", error.message || "Lỗi kết nối");
+      setSelectedFiles(pendingFiles);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteConversation = async (conversationId) => {
-    try {
-      const response = await chatApi.deleteConversation(conversationId);
-      if (response.success) {
-        setConversations((prev) =>
-          prev.filter((conv) => conv.id !== conversationId),
-        );
-        if (conversationId === conversationId) {
-          handleNewConversation();
-        }
-      }
-    } catch (error) {
-      console.error("Error deleting conversation:", error);
-    }
+  const handleSuggestionPress = (question) => {
+    setInputText(question);
   };
+
+  const sidebar = (
+    <ChatSidebar
+      user={currentUser}
+      conversations={conversations}
+      currentConversationId={conversationId}
+      onSelectConversation={handleSelectConversation}
+      onNewConversation={handleNewConversation}
+      onDeleteConversation={handleDeleteConversation}
+      onRenameConversation={handleRenameConversation}
+      onProfilePress={() => {
+        setSidebarVisible(false);
+        setUserProfileVisible(true);
+      }}
+      onLogout={onLogout}
+    />
+  );
+  const displayName = currentUser?.name || currentUser?.username || "bạn";
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.mainLayout}>
-        {/* Sidebar */}
-        {width > 768 && (
-          <View style={styles.sidebarContainer}>
-            <ChatSidebar
-              conversations={conversations}
-              currentConversationId={conversationId}
-              onSelectConversation={handleSelectConversation}
-              onNewConversation={handleNewConversation}
-              onDeleteConversation={handleDeleteConversation}
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        <View style={styles.layout}>
+          {isWide && <View style={styles.sidebarPane}>{sidebar}</View>}
+
+          <View style={styles.chatPane}>
+            <ChatHeaderBar
+              user={currentUser}
+              activeModel={activeModel}
+              onMenuPress={() => setSidebarVisible(true)}
+              onProfilePress={() => setUserProfileVisible(true)}
+              onLogout={onLogout}
             />
-          </View>
-        )}
 
-        {/* Chat Area */}
-        <View style={styles.chatArea}>
-          {/* Header */}
-          <ChatHeaderBar
-            user={user}
-            onMenuPress={() => setSidebarVisible(!sidebarVisible)}
-            onProfilePress={() => setUserProfileVisible(true)}
-            onLogout={onLogout}
-          />
-
-          {/* Messages List */}
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <MessageBubble message={item} user={user} />
-            )}
-            contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() => {
-              if (flatListRef.current) {
-                flatListRef.current.scrollToEnd({ animated: true });
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <MessageBubble message={item} user={currentUser} />
+              )}
+              contentContainerStyle={[
+                styles.messagesList,
+                messages.length === 0 && styles.emptyMessagesList,
+              ]}
+              ListEmptyComponent={
+                <View style={styles.welcome}>
+                  <View style={styles.welcomeIcon}>
+                    <OutlineIcon name="message-circle" size={28} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.welcomeTitle}>
+                    {getGreeting()}, {displayName}
+                  </Text>
+                  <Text style={styles.welcomeText}>
+                    Tôi có thể giúp bạn tìm hiểu thông tin về Học viện Kỹ thuật Mật mã. Hãy hỏi bất cứ điều gì bạn muốn biết!
+                  </Text>
+                  <View style={styles.suggestionGrid}>
+                    {SUGGESTED_QUESTIONS.map((question) => (
+                      <TouchableOpacity
+                        key={question}
+                        style={styles.suggestionChip}
+                        onPress={() => handleSuggestionPress(question)}
+                        activeOpacity={0.82}
+                      >
+                        <Text style={styles.suggestionText}>{question}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
               }
-            }}
-          />
+              ListFooterComponent={
+                loading ? (
+                  <View style={styles.typingRow}>
+                    <View style={styles.thinkingLogoFrame}>
+                      <Image
+                        source={require("../../assets/kma.png")}
+                        style={styles.thinkingLogo}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.thinkingTextBlock}>
+                      <Text style={styles.typingText}>
+                        ACTVN-AGENT đang xử lý...
+                      </Text>
+                      <Text style={styles.typingModel} numberOfLines={1}>
+                        {activeModel?.name
+                          ? `Model: ${activeModel.name}`
+                          : "Đang đồng bộ model hệ thống"}
+                      </Text>
+                    </View>
+                    <ActivityIndicator color={COLORS.primary} size="small" />
+                  </View>
+                ) : null
+              }
+              onContentSizeChange={() =>
+                flatListRef.current?.scrollToEnd({ animated: true })
+              }
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              keyboardShouldPersistTaps="handled"
+            />
 
-          {/* Input Area */}
-          <View style={styles.inputArea}>
-            {/* File Preview */}
-            {selectedFiles.length > 0 && (
-              <View style={styles.filePreview}>
+            <View style={styles.composer}>
+              {selectedFiles.length > 0 && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  style={styles.fileScroll}
+                  contentContainerStyle={styles.fileChipRow}
                 >
                   {selectedFiles.map((file, index) => (
-                    <View key={index} style={styles.fileChip}>
+                    <View key={`${file.name}-${index}`} style={styles.fileChip}>
+                      <OutlineIcon name="paperclip" size={13} color={COLORS.primary} />
                       <Text style={styles.fileChipText} numberOfLines={1}>
                         {file.name}
                       </Text>
                       <TouchableOpacity
-                        onPress={() => {
+                        style={styles.fileChipRemoveButton}
+                        onPress={() =>
                           setSelectedFiles((prev) =>
                             prev.filter((_, i) => i !== index),
-                          );
-                        }}
+                          )
+                        }
                       >
-                        <Text style={styles.fileChipRemove}>✕</Text>
+                        <OutlineIcon name="x" size={13} color={COLORS.primary} />
                       </TouchableOpacity>
                     </View>
                   ))}
                 </ScrollView>
+              )}
+
+              <View style={styles.inputRow}>
+                <TouchableOpacity
+                  style={styles.attachButton}
+                  onPress={() => setFileUploadVisible(true)}
+                  disabled={loading}
+                >
+                  <OutlineIcon name="paperclip" size={19} color={COLORS.primary} />
+                </TouchableOpacity>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nhập tin nhắn..."
+                  placeholderTextColor={COLORS.outline}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  multiline
+                  editable={!loading}
+                />
+
+                <TouchableOpacity
+                  style={[
+                    styles.sendButton,
+                    (loading || (!inputText.trim() && selectedFiles.length === 0)) &&
+                      styles.disabledButton,
+                  ]}
+                  onPress={handleSendMessage}
+                  disabled={loading || (!inputText.trim() && selectedFiles.length === 0)}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={COLORS.primary} size="small" />
+                  ) : (
+                    <OutlineIcon name="send" size={18} color={COLORS.primary} />
+                  )}
+                </TouchableOpacity>
               </View>
-            )}
-
-            {/* Input Row */}
-            <View style={styles.inputRow}>
-              <TouchableOpacity
-                style={styles.attachButton}
-                onPress={() => setFileUploadVisible(true)}
-                disabled={loading}
-              >
-                <Text style={styles.attachIcon}>📎</Text>
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Nhập tin nhắn..."
-                placeholderTextColor={COLORS.onSurfaceVariant}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-                editable={!loading}
-              />
-
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (loading ||
-                    (!inputText.trim() && selectedFiles.length === 0)) &&
-                    styles.sendButtonDisabled,
-                ]}
-                onPress={handleSendMessage}
-                disabled={
-                  loading || (!inputText.trim() && selectedFiles.length === 0)
-                }
-              >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.surface} size="small" />
-                ) : (
-                  <Text style={styles.sendIcon}>➜</Text>
-                )}
-              </TouchableOpacity>
             </View>
           </View>
         </View>
 
-        {/* File Upload Modal */}
+        <Modal
+          visible={!isWide && sidebarVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSidebarVisible(false)}
+        >
+          <View style={styles.drawerOverlay}>
+            <TouchableOpacity
+              style={styles.drawerBackdrop}
+              onPress={() => setSidebarVisible(false)}
+              activeOpacity={1}
+            />
+            <View style={styles.drawer}>{sidebar}</View>
+          </View>
+        </Modal>
+
         <Modal
           visible={fileUploadVisible}
           animationType="slide"
@@ -278,7 +384,6 @@ const ChatScreen = ({ user, onLogout }) => {
           />
         </Modal>
 
-        {/* User Profile Modal */}
         <Modal
           visible={userProfileVisible}
           animationType="slide"
@@ -286,7 +391,8 @@ const ChatScreen = ({ user, onLogout }) => {
           onRequestClose={() => setUserProfileVisible(false)}
         >
           <UserProfileModal
-            user={user}
+            user={currentUser}
+            onUserUpdate={setCurrentUser}
             onClose={() => setUserProfileVisible(false)}
             onLogout={() => {
               setUserProfileVisible(false);
@@ -294,7 +400,7 @@ const ChatScreen = ({ user, onLogout }) => {
             }}
           />
         </Modal>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -304,114 +410,197 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.surface,
   },
-
-  mainLayout: {
+  layout: {
     flex: 1,
     flexDirection: "row",
   },
-
-  sidebarContainer: {
-    width: 280,
-    borderRightWidth: 1,
-    borderRightColor: COLORS.outlineVariant,
-    backgroundColor: COLORS.surfaceSecondary,
+  sidebarPane: {
+    width: 320,
   },
-
-  chatArea: {
+  chatPane: {
     flex: 1,
-    flexDirection: "column",
+    backgroundColor: COLORS.surface,
   },
-
   messagesList: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.lg,
+    gap: SPACING.md,
   },
-
-  inputArea: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.outlineVariant,
-    backgroundColor: COLORS.surface,
+  emptyMessagesList: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+  welcome: {
+    alignItems: "center",
     paddingHorizontal: SPACING.lg,
+  },
+  welcomeIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.primary20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.primary50,
+    marginBottom: SPACING.lg,
+  },
+  welcomeTitle: {
+    color: COLORS.onSurface,
+    fontSize: 25,
+    fontWeight: "800",
+    marginBottom: SPACING.sm,
+    textAlign: "center",
+  },
+  welcomeText: {
+    color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.base,
+    textAlign: "center",
+    lineHeight: 24,
+  },
+  suggestionGrid: {
+    width: "100%",
+    marginTop: SPACING["2xl"],
+    gap: SPACING.sm,
+  },
+  suggestionChip: {
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: RADIUS.md,
+    backgroundColor: "#fff",
+    paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
   },
-
-  filePreview: {
-    marginBottom: SPACING.md,
+  suggestionText: {
+    color: COLORS.onSurface,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "700",
+    lineHeight: 20,
   },
-
-  fileScroll: {
-    flexDirection: "row",
-  },
-
-  fileChip: {
+  typingRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.primary20,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+  },
+  thinkingLogoFrame: {
+    width: 34,
+    height: 34,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.primary20,
+    backgroundColor: "#fff",
+  },
+  thinkingLogo: {
+    width: 24,
+    height: 24,
+  },
+  thinkingTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  typingText: {
+    color: COLORS.onSurface,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "700",
+  },
+  typingModel: {
+    color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    marginTop: 2,
+  },
+  composer: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.outlineVariant,
+    backgroundColor: COLORS.surfaceSecondary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+  },
+  fileChipRow: {
+    gap: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  fileChip: {
+    maxWidth: 240,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: COLORS.primary20,
     borderRadius: RADIUS.full,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.sm,
-    marginRight: SPACING.sm,
   },
-
   fileChipText: {
+    color: COLORS.primary,
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.primary,
-    marginRight: SPACING.sm,
-    maxWidth: 150,
+    fontWeight: "700",
+    maxWidth: 170,
   },
-
-  fileChipRemove: {
-    color: COLORS.primary,
-    fontWeight: "600",
+  fileChipRemoveButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
-
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: SPACING.sm,
   },
-
   attachButton: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surfaceSecondary,
-    justifyContent: "center",
     alignItems: "center",
-  },
-
-  attachIcon: {
-    fontSize: 20,
-  },
-
-  messageInput: {
-    flex: 1,
-    borderRadius: RADIUS.md,
+    justifyContent: "center",
+    backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: COLORS.outlineVariant,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    minHeight: 46,
+    borderWidth: 1.5,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingVertical: Platform.OS === "ios" ? 13 : 9,
+    backgroundColor: "#fff",
     color: COLORS.onSurface,
     fontSize: TYPOGRAPHY.fontSize.base,
-    maxHeight: 100,
   },
-
   sendButton: {
-    width: 44,
-    height: 44,
+    width: 46,
+    height: 46,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primary,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: COLORS.primary20,
   },
-
-  sendButtonDisabled: {
-    opacity: 0.5,
+  disabledButton: {
+    opacity: 0.45,
   },
-
-  sendIcon: {
-    fontSize: 20,
-    color: COLORS.surface,
+  drawerOverlay: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: "rgba(15,20,25,0.35)",
+  },
+  drawerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  drawer: {
+    width: "86%",
+    maxWidth: 340,
+    height: "100%",
+    backgroundColor: COLORS.surfaceSecondary,
   },
 });
 

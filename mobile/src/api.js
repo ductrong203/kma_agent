@@ -78,7 +78,7 @@ export const authApi = {
 
   async register(payload) {
     try {
-      const result = await apiRequest(ENDPOINTS.register, {
+      await apiRequest(ENDPOINTS.register, {
         method: "POST",
         body: JSON.stringify({
           username: payload.username,
@@ -91,7 +91,6 @@ export const authApi = {
         }),
       });
 
-      // Auto login after register so the mobile session has valid tokens.
       return this.login(payload.username, payload.password);
     } catch (error) {
       return { success: false, error: error.message };
@@ -100,17 +99,34 @@ export const authApi = {
 
   async updateProfile(data) {
     try {
-      const result = await apiRequest(ENDPOINTS.me, {
+      const result = await apiRequest(ENDPOINTS.updateProfile, {
         method: "PUT",
         body: JSON.stringify({
           username: data.username,
-          email: data.email,
-          student_code: data.studentCode,
+          email: data.email || null,
+          student_name: data.name || data.studentName || null,
+          student_code: data.studentCode || null,
+          student_class: data.studentClass || null,
         }),
       });
       const user = normalizeUser(result.data);
       await storage.setUser(user);
       return { success: true, user };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  async changePassword(data) {
+    try {
+      await apiRequest(ENDPOINTS.changePassword, {
+        method: "PUT",
+        body: JSON.stringify({
+          current_password: data.currentPassword,
+          new_password: data.newPassword,
+        }),
+      });
+      return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -137,12 +153,72 @@ export const chatApi = {
         title: `Cuộc trò chuyện ${new Date().toLocaleString("vi-VN")}`,
       }),
     });
-    return {
-      id: result.data._id,
-      title: result.data.title,
-      created_at: result.data.created_at,
-      updated_at: result.data.updated_at,
-    };
+    return normalizeConversation(result.data);
+  },
+
+  async renameConversation(conversationId, title) {
+    try {
+      const result = await apiRequest(ENDPOINTS.renameConversation(conversationId), {
+        method: "PUT",
+        body: JSON.stringify({ title }),
+      });
+      return { success: true, data: normalizeConversation(result.data) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  async uploadFile(file, conversationId) {
+    try {
+      const formData = new FormData();
+      formData.append("file", {
+        uri: file.uri,
+        type: file.type || "application/octet-stream",
+        name: file.name,
+      });
+
+      const query = conversationId ? `?conversation_id=${conversationId}` : "";
+      const result = await apiRequest(`${ENDPOINTS.uploadFile}${query}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const fileInfo = result.data || result.fileInfo || result;
+      return {
+        success: true,
+        file: {
+          ...file,
+          file_id: fileInfo.file_id,
+          status: fileInfo.status || "ready",
+          size: fileInfo.size || file.size,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  async listFiles() {
+    try {
+      const result = await apiRequest(ENDPOINTS.listFiles);
+      return {
+        success: true,
+        data: (result.data || []).map(normalizeFile),
+      };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  async deleteFile(fileId) {
+    try {
+      await apiRequest(ENDPOINTS.deleteFile(fileId), {
+        method: "DELETE",
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   },
 
   async getConversations() {
@@ -152,13 +228,7 @@ export const chatApi = {
       );
       return {
         success: true,
-        data: (result.data || []).map((item) => ({
-          id: item._id,
-          title: item.title || "Trò chuyện mới",
-          preview: item.preview || "",
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-        })),
+        data: (result.data || []).map(normalizeConversation),
       };
     } catch (error) {
       return { success: false, error: error.message };
@@ -173,10 +243,11 @@ export const chatApi = {
       return {
         success: true,
         data: (result.data || []).map((item) => ({
-          id: item._id,
+          id: item._id || item.id,
           content: normalizeContent(item.content),
           role: item.is_user ? "user" : "assistant",
           timestamp: item.created_at,
+          attachments: item.attachments || [],
         })),
       };
     } catch (error) {
@@ -186,34 +257,49 @@ export const chatApi = {
 
   async sendMessage(payload) {
     try {
-      const { content, conversation_id, files } = payload;
+      const { content, conversation_id, files, user_id } = payload;
+      let activeConversationId = conversation_id;
 
-      // Create form data for file upload
-      const formData = new FormData();
-      formData.append("content", content);
-
-      if (files && files.length > 0) {
-        files.forEach((file, index) => {
-          formData.append(`files`, {
-            uri: file.uri,
-            type: file.type || "application/octet-stream",
-            name: file.name,
-          });
-        });
+      if (!activeConversationId) {
+        const created = await this.createConversation(user_id);
+        activeConversationId = created.id;
       }
 
-      const result = await apiRequest(ENDPOINTS.sendMessage(conversation_id), {
+      const uploadedFiles = [];
+      if (files && files.length > 0) {
+        for (const file of files) {
+          if (file.file_id) {
+            uploadedFiles.push(file);
+            continue;
+          }
+
+          const upload = await this.uploadFile(file, activeConversationId);
+          if (!upload.success) {
+            throw new Error(upload.error || `Không thể tải lên ${file.name}`);
+          }
+          uploadedFiles.push(upload.file);
+        }
+      }
+
+      const result = await apiRequest(ENDPOINTS.sendMessage(activeConversationId), {
         method: "POST",
-        body: formData,
+        body: JSON.stringify({
+          content,
+          is_user: true,
+          attachments: uploadedFiles.map((file) => file.file_id).filter(Boolean),
+        }),
       });
 
       return {
         success: true,
-        conversation_id: result.data.conversation_id || conversation_id,
+        conversation_id: activeConversationId,
+        uploadedFiles,
         data: {
+          id: result.data._id || result.data.id,
           content: normalizeContent(result.data.content),
           role: "assistant",
           timestamp: result.data.created_at,
+          attachments: result.data.attachments || [],
         },
       };
     } catch (error) {
@@ -233,6 +319,65 @@ export const chatApi = {
   },
 };
 
+export const modelApi = {
+  async getActiveModel() {
+    try {
+      const currentResult = await apiRequest(ENDPOINTS.currentModel);
+      const currentModel = extractActiveModelPayload(currentResult);
+      const normalizedCurrent = normalizeModel(currentModel);
+      if (hasModelName(currentModel)) {
+        return { success: true, data: normalizedCurrent };
+      }
+    } catch (error) {
+      // Fallback to DB active model below. The current model endpoint is the
+      // runtime source of truth, but older servers may not expose it.
+    }
+
+    try {
+      const result = await apiRequest(ENDPOINTS.activeModel);
+      const activeModel = extractActiveModelPayload(result);
+      return { success: true, data: normalizeModel(activeModel) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+};
+
+export const extractActiveModelPayload = (response) => {
+  const payload = response?.data || response || null;
+  if (!payload) return null;
+  return payload.current_active || payload.active_model || payload.currentModel || payload;
+};
+
+export const hasModelName = (model) =>
+  Boolean(
+    model?.name ||
+      model?.model_name ||
+      model?.modelName ||
+      model?.model ||
+      model?.ollama_model ||
+      model?.gemini_model ||
+      model?.path,
+  );
+
+export const normalizeConversation = (item) => ({
+  id: item._id || item.id,
+  title: item.title || "Trò chuyện mới",
+  preview: normalizeContent(item.preview || ""),
+  created_at: item.created_at,
+  updated_at: item.updated_at,
+});
+
+export const normalizeFile = (file) => ({
+  file_id: file.file_id || file.id,
+  name: file.original_filename || file.filename || file.name || file.file_id,
+  filename: file.original_filename || file.filename || file.name || file.file_id,
+  size: file.size || 0,
+  status: file.status || "ready",
+  created_at: file.created_at,
+  embedding_count: file.embedding_count || 0,
+});
+
 export const normalizeUser = (user) => ({
   id: user._id || user.user_id || user.id,
   username: user.username,
@@ -241,7 +386,31 @@ export const normalizeUser = (user) => ({
   role: user.role || "user",
   studentCode: user.student_code,
   studentClass: user.student_class,
+  createdAt: user.created_at,
 });
+
+export const normalizeModel = (model) => {
+  if (!model) return null;
+  const name =
+    model.name ||
+    model.model_name ||
+    model.modelName ||
+    model.model ||
+    model.ollama_model ||
+    model.gemini_model ||
+    model.path ||
+    "Không xác định";
+
+  return {
+    id: model._id || model.id,
+    name,
+    type: model.modelType || model.model_type || model.type || "model",
+    provider: model.provider,
+    path: model.path,
+    isActive: model.isActive ?? model.is_active,
+    updatedAt: model.updated_at || model.updatedAt,
+  };
+};
 
 export const normalizeContent = (content) => {
   if (content === null || content === undefined) return "";
@@ -255,7 +424,8 @@ export const normalizeContent = (content) => {
       .filter(Boolean)
       .join("\n");
   }
-  if (typeof content === "object")
+  if (typeof content === "object") {
     return content.text || content.content || JSON.stringify(content);
+  }
   return String(content);
 };

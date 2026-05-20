@@ -1,239 +1,143 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Modal,
-  Dimensions,
-} from "react-native";
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY } from "../theme";
+﻿import React from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import OutlineIcon from "./OutlineIcon";
 import KMALogo from "./KMALogo";
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "../theme";
 
-const { width } = Dimensions.get("window");
-const isSmallScreen = width < 480;
-
-const ChatHeaderBar = ({ user, onMenuPress, onProfilePress, onLogout }) => {
-  const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+const ChatHeaderBar = ({
+  user,
+  activeModel,
+  onMenuPress,
+  onProfilePress,
+  onLogout,
+}) => {
+  const modelLabel = activeModel?.name
+    ? `Model: ${activeModel.name}`
+    : "Model: đang tải...";
 
   return (
     <View style={styles.header}>
-      <View style={styles.headerContent}>
-        <View style={styles.headerLeft}>
-          {isSmallScreen && (
-            <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
-              <Text style={styles.menuIcon}>☰</Text>
-            </TouchableOpacity>
-          )}
-          <KMALogo
-            size={isSmallScreen ? "small" : "normal"}
-            showText={!isSmallScreen}
-          />
-        </View>
+      <View style={styles.row}>
+        <TouchableOpacity
+          onPress={onMenuPress}
+          style={styles.iconButton}
+          accessibilityLabel="Mở lịch sử trò chuyện"
+        >
+          <OutlineIcon name="menu" size={20} color={COLORS.onSurface} />
+        </TouchableOpacity>
 
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={onProfilePress}
-          >
-            <View style={styles.profileAvatar}>
-              <Text style={styles.profileInitial}>
-                {user?.username?.charAt(0).toUpperCase() || "U"}
+        <View style={styles.brand}>
+          <View style={styles.logoFrame}>
+            <KMALogo size="small" showText={false} />
+          </View>
+          <View style={styles.titleBlock}>
+            <Text style={styles.title}>ACTVN-AGENT</Text>
+            <View style={styles.statusRow}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText} numberOfLines={1}>
+                {modelLabel}
               </Text>
             </View>
-          </TouchableOpacity>
+          </View>
+        </View>
 
+        <View style={styles.actions}>
           <TouchableOpacity
-            style={styles.moreButton}
-            onPress={() => setMoreMenuVisible(true)}
+            style={styles.iconButton}
+            onPress={onProfilePress}
+            accessibilityLabel="Thông tin người dùng"
           >
-            <Text style={styles.moreIcon}>⋮</Text>
+            <Text style={styles.profileInitial}>
+              {(user?.name || user?.username || "U")[0]?.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={onLogout}
+            accessibilityLabel="Đăng xuất"
+          >
+            <OutlineIcon name="log-out" size={18} color={COLORS.error} />
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-        <View style={styles.statusIndicator} />
-        <Text style={styles.statusText}>Ready to assist</Text>
-      </View>
-
-      {/* More Menu Modal */}
-      <Modal
-        visible={moreMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMoreMenuVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          onPress={() => setMoreMenuVisible(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.moreMenu}>
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMoreMenuVisible(false);
-                onProfilePress();
-              }}
-            >
-              <Text style={styles.menuItemText}>👤 Thông tin cá nhân</Text>
-            </TouchableOpacity>
-
-            <View style={styles.menuDivider} />
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMoreMenuVisible(false);
-                onLogout();
-              }}
-            >
-              <Text style={[styles.menuItemText, styles.dangerText]}>
-                🚪 Đăng xuất
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   header: {
+    backgroundColor: COLORS.surfaceSecondary,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.outlineVariant,
-    backgroundColor: COLORS.surface,
   },
-
-  headerContent: {
+  row: {
+    minHeight: 64,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
+    paddingHorizontal: SPACING.md,
     gap: SPACING.md,
+  },
+  brand: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+  },
+  logoFrame: {
+    width: 38,
+    height: 38,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    backgroundColor: "#fff",
+  },
+  titleBlock: {
+    flex: 1,
     minWidth: 0,
   },
-
-  menuButton: {
-    padding: SPACING.sm,
-    marginRight: SPACING.sm,
-  },
-
-  menuIcon: {
-    fontSize: 24,
+  title: {
     color: COLORS.onSurface,
+    fontSize: TYPOGRAPHY.fontSize.base,
+    fontWeight: "800",
   },
-
-  headerTitle: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: "600",
-    color: COLORS.onSurface,
-  },
-
-  headerRight: {
+  statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SPACING.md,
+    gap: SPACING.xs,
+    marginTop: 2,
   },
-
-  profileButton: {
-    padding: SPACING.sm,
-  },
-
-  profileAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  profileInitial: {
-    color: COLORS.surface,
-    fontWeight: "600",
-    fontSize: TYPOGRAPHY.fontSize.sm,
-  },
-
-  moreButton: {
-    padding: SPACING.sm,
-  },
-
-  moreIcon: {
-    fontSize: 20,
-    color: COLORS.onSurface,
-  },
-
-  statusBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    gap: SPACING.sm,
-    backgroundColor: COLORS.primary50,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.outlineVariant,
-  },
-
-  statusIndicator: {
-    width: 8,
-    height: 8,
+  statusDot: {
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: COLORS.success,
   },
-
   statusText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
     color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.xs,
   },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-start",
-    paddingTop: 60,
-    paddingRight: SPACING.lg,
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
   },
-
-  moreMenu: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    overflow: "hidden",
-    minWidth: 200,
-    alignSelf: "flex-end",
-    marginRight: SPACING.lg,
-    shadowColor: COLORS.shadowLg,
-    elevation: 5,
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    backgroundColor: "#fff",
   },
-
-  menuItem: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
-  },
-
-  menuItemText: {
+  profileInitial: {
+    color: COLORS.primary,
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.onSurface,
-    fontWeight: "500",
-  },
-
-  dangerText: {
-    color: COLORS.error,
-  },
-
-  menuDivider: {
-    height: 1,
-    backgroundColor: COLORS.outlineVariant,
+    fontWeight: "800",
   },
 });
 

@@ -1,20 +1,19 @@
 import React, { useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, SPACING, RADIUS, TYPOGRAPHY, commonStyles } from "../theme";
 import { authApi } from "../api";
 import KMALogo from "../components/KMALogo";
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from "../theme";
 
 const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
   const [username, setUsername] = useState("");
@@ -33,7 +32,6 @@ const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
 
     try {
       const response = await authApi.login(username.trim(), password);
-
       if (response.success) {
         onLoginSuccess(response.user);
       } else {
@@ -41,47 +39,48 @@ const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
       }
     } catch (err) {
       setError(err.message || "Lỗi kết nối");
-      console.error("Login error:", err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          {/* Header Section */}
-          <View style={styles.headerSection}>
-            <KMALogo size="normal" showText={false} />
-            <Text style={styles.tagline}>ACTVN AI</Text>
-            <Text style={styles.subtitle}>Học viện Kỹ thuật Mật mã</Text>
-            <Text style={styles.description}>Đăng nhập để tiếp tục</Text>
-          </View>
+          <View style={styles.card}>
+            <View style={styles.logoIcon}>
+              <KMALogo size="small" showText={false} />
+            </View>
 
-          {/* Form Section */}
-          <View style={styles.formSection}>
-            {/* Error Message */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Đăng nhập ACTVN-AGENT</Text>
+              <Text style={styles.subtitle}>
+                Học viện Kỹ thuật Mật mã
+              </Text>
+            </View>
+
             {error ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
 
-            {/* Username Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Username</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Nhập username"
-                placeholderTextColor={COLORS.onSurfaceVariant}
+                placeholderTextColor={COLORS.outline}
                 value={username}
+                autoCapitalize="none"
                 onChangeText={(text) => {
                   setUsername(text);
                   setError("");
@@ -90,13 +89,12 @@ const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
               />
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
+            <View style={styles.formGroup}>
               <Text style={styles.label}>Mật khẩu</Text>
               <TextInput
                 style={styles.input}
                 placeholder="Nhập mật khẩu"
-                placeholderTextColor={COLORS.onSurfaceVariant}
+                placeholderTextColor={COLORS.outline}
                 secureTextEntry
                 value={password}
                 onChangeText={(text) => {
@@ -107,34 +105,25 @@ const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
               />
             </View>
 
-            {/* Login Button */}
             <TouchableOpacity
-              style={[styles.loginButton, loading && styles.buttonDisabled]}
+              style={[styles.submitButton, loading && styles.disabledButton]}
               onPress={handleLogin}
               disabled={loading}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color={COLORS.surface} size="small" />
+                <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.loginButtonText}>Đăng nhập</Text>
+                <Text style={styles.submitText}>Đăng nhập</Text>
               )}
             </TouchableOpacity>
 
-            {/* Switch to Register */}
-            <View style={styles.switchSection}>
-              <Text style={styles.switchText}>Chưa có tài khoản? </Text>
+            <View style={styles.switchBox}>
+              <Text style={styles.switchText}>Chưa có tài khoản?</Text>
               <TouchableOpacity onPress={onSwitchToRegister}>
                 <Text style={styles.switchLink}>Đăng ký ngay</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Info Section */}
-          <View style={styles.infoSection}>
-            <Text style={styles.infoText}>
-              © 2025 KMA Academy. All rights reserved.
-            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -143,136 +132,138 @@ const LoginScreen = ({ onLoginSuccess, onSwitchToRegister }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  page: {
     flex: 1,
     backgroundColor: COLORS.surface,
   },
-
   keyboardView: {
     flex: 1,
   },
-
   scrollContent: {
     flexGrow: 1,
-    padding: SPACING.lg,
-    justifyContent: "space-between",
-  },
-
-  headerSection: {
-    alignItems: "center",
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.xl * 2,
-    gap: SPACING.md,
-  },
-
-  logoText: {
-    fontSize: TYPOGRAPHY.fontSize["4xl"],
-    fontWeight: "700",
-    color: COLORS.primary,
-    marginBottom: SPACING.sm,
-  },
-
-  tagline: {
-    fontSize: TYPOGRAPHY.fontSize.xl,
-    fontWeight: "700",
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-  },
-
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.onSurfaceVariant,
-    marginTop: SPACING.xs,
-  },
-
-  description: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    color: COLORS.onSurfaceVariant,
-    marginTop: SPACING.md,
-    fontWeight: "500",
-  },
-
-  formSection: {
-    width: "100%",
-  },
-
-  inputGroup: {
-    marginBottom: SPACING.lg,
-  },
-
-  label: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: "600",
-    color: COLORS.onSurface,
-    marginBottom: SPACING.sm,
-  },
-
-  input: {
-    ...commonStyles.input,
-    minHeight: 48,
-  },
-
-  errorBox: {
-    backgroundColor: "rgba(244, 67, 54, 0.1)",
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.error,
-  },
-
-  errorText: {
-    color: COLORS.error,
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: "500",
-  },
-
-  loginButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
     justifyContent: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING["3xl"],
+  },
+  card: {
+    width: "100%",
+    maxWidth: 460,
+    alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
+    borderRadius: 24,
+    paddingHorizontal: SPACING["2xl"],
+    paddingVertical: SPACING["3xl"],
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 18 },
+    shadowRadius: 34,
+    elevation: 6,
+  },
+  logoIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignSelf: "center",
     alignItems: "center",
-    marginTop: SPACING.lg,
-    minHeight: 48,
+    justifyContent: "center",
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.28,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 4,
   },
-
-  buttonDisabled: {
-    opacity: 0.6,
+  header: {
+    alignItems: "center",
+    marginBottom: SPACING["2xl"],
   },
-
-  loginButtonText: {
-    color: COLORS.surface,
-    fontSize: TYPOGRAPHY.fontSize.base,
+  title: {
+    color: COLORS.onSurface,
+    fontSize: 24,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: SPACING.sm,
+  },
+  subtitle: {
+    color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  errorBox: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  errorText: {
+    color: "#be123c",
+    fontSize: TYPOGRAPHY.fontSize.sm,
     fontWeight: "600",
   },
-
-  switchSection: {
+  formGroup: {
+    marginBottom: SPACING.lg,
+  },
+  label: {
+    color: COLORS.onSurface,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "700",
+    marginBottom: SPACING.sm,
+  },
+  input: {
+    minHeight: 50,
+    borderWidth: 1.5,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: RADIUS.md,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    color: COLORS.onSurface,
+    fontSize: TYPOGRAPHY.fontSize.base,
+    paddingHorizontal: SPACING.lg,
+  },
+  submitButton: {
+    minHeight: 52,
+    borderRadius: RADIUS.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.28,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  disabledButton: {
+    opacity: 0.65,
+  },
+  submitText: {
+    color: "#fff",
+    fontSize: TYPOGRAPHY.fontSize.base,
+    fontWeight: "800",
+  },
+  switchBox: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.outlineVariant,
+    marginTop: SPACING["2xl"],
+    paddingTop: SPACING.lg,
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: SPACING.lg,
+    gap: SPACING.sm,
   },
-
   switchText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.sm,
   },
-
   switchLink: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.primary,
-    fontWeight: "600",
-  },
-
-  infoSection: {
-    alignItems: "center",
-    marginTop: SPACING.lg,
-  },
-
-  infoText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.onSurfaceVariant,
-    textAlign: "center",
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "800",
   },
 });
 

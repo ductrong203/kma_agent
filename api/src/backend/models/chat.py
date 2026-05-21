@@ -89,10 +89,12 @@ class MessageCreate(BaseModel):
     is_user: bool = True
     department: Optional[str] = None  # 'phongdaotao', 'phongkhaothi', or None for all
     attachments: Optional[List[str]] = []  # List of file_ids
+    chat_mode: Optional[str] = "document"  # 'document' for RAG/docs, 'student' for scores/info
 
 class MessageQuickChat(BaseModel):
     content: str
     department: Optional[str] = None  # 'phongdaotao', 'phongkhaothi', or None for all
+    chat_mode: Optional[str] = "document"
 
 class ConversationCreate(BaseModel):
     user_id: str

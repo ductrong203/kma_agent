@@ -1,22 +1,24 @@
-import logging
+﻿import logging
 import os
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
+from pydantic import BaseModel, Field
 
 from .state import MyAgentState
-from ..llm.config import get_gemini_llm, get_llm
+from ..llm.config import get_llm
 from ..llm.model_manager import model_manager, ModelType
 from ..rag import create_rag_tool
-from ..score import get_student_scores, get_student_info, calculate_average_scores
+from ..score import get_student_info
 from ..score.models import ScoreFilter
 from ..score.student_tool import global_db
 
@@ -26,23 +28,72 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Define tools
-score_tool = get_student_scores
-student_info_tool = get_student_info
+# ReAct tools are only for document/regulation retrieval. Student score queries are
+# handled before ReAct by LLM structured extraction and direct database access.
 rag_tool = create_rag_tool()
-calculator_tool = calculate_average_scores
-
-# Get all tools
-tools = [score_tool, student_info_tool, calculator_tool, rag_tool]
+tools = [rag_tool]
 
 # Load prompts
 prompts_dir = os.path.join(os.path.dirname(__file__), "prompts")
 with open(os.path.join(prompts_dir, "system_prompt.txt"), "r", encoding="utf-8") as f:
-    react_prompt = f.read().strip()
+    system_prompt = f.read().strip()
 
 
 STUDENT_CODE_RE = re.compile(r"\b[ACDMT]T\d{6}\b", re.IGNORECASE)
-SEMESTER_RE = re.compile(r"\b(?:ki|k|ky|hk|hoc ky)\s*([1-4])\s*[-_/ ]\s*(\d{4})\s*[-_/ ]\s*(\d{4})\b", re.IGNORECASE)
+GRADE_POINTS: Dict[str, float] = {
+    "A+": 4.0,
+    "A": 3.8,
+    "B+": 3.5,
+    "B": 3.0,
+    "C+": 2.5,
+    "C": 2.0,
+    "D+": 1.5,
+    "D": 1.0,
+    "F": 0.0,
+}
+CONTEXTUALIZER_HISTORY_MESSAGES = 5
+CONTEXTUALIZER_MESSAGE_MAX_CHARS = 1200
+
+
+@dataclass
+class ScoreQueryPlan:
+    student_code: str
+    semester: Optional[str] = None
+    semester_scope: str = "all"  # all | latest | specific
+    subject_name: Optional[str] = None
+    wants_average: bool = False
+    wants_gpa_4: bool = False
+    wants_details: bool = True
+
+
+class ScoreQueryExtraction(BaseModel):
+    is_score_query: bool = Field(
+        description="True if the user is asking about their grades, transcript, GPA, average score, semester scores, or a subject score."
+    )
+    semester_scope: str = Field(
+        default="all",
+        description="One of: all, latest, specific. latest means current/nearest/newest semester."
+    )
+    semester: Optional[str] = Field(
+        default=None,
+        description="Semester code normalized to kiN-YYYY-YYYY when explicitly mentioned, otherwise null."
+    )
+    subject_name: Optional[str] = Field(
+        default=None,
+        description="Course/subject name exactly as mentioned by the user, without semester/time words."
+    )
+    wants_average: bool = Field(
+        default=False,
+        description="True if the user asks to calculate/show average score, GPA, cumulative score, or summary."
+    )
+    wants_gpa_4: bool = Field(
+        default=False,
+        description="True if the user asks for GPA/4-point scale/letter grade/grade coefficient."
+    )
+    wants_details: bool = Field(
+        default=True,
+        description="False only when the user explicitly asks for only the final average/GPA without the course table."
+    )
 
 
 def _strip_accents(text: str) -> str:
@@ -50,6 +101,35 @@ def _strip_accents(text: str) -> str:
         char for char in unicodedata.normalize("NFD", text or "")
         if unicodedata.category(char) != "Mn"
     ).lower()
+
+
+def _message_content_to_text(content) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                parts.append(str(text) if text is not None else json.dumps(item, ensure_ascii=False))
+            else:
+                parts.append(str(item))
+        return "\n".join(part for part in parts if part).strip()
+    if isinstance(content, dict):
+        text = content.get("text") or content.get("content")
+        return str(text) if text is not None else json.dumps(content, ensure_ascii=False)
+    return str(content)
+
+
+def _truncate_for_contextualizer(content) -> str:
+    text = _message_content_to_text(content).strip()
+    if len(text) <= CONTEXTUALIZER_MESSAGE_MAX_CHARS:
+        return text
+    return text[:CONTEXTUALIZER_MESSAGE_MAX_CHARS].rstrip() + "\n...[truncated]"
 
 
 def _extract_authenticated_student_code(query: str) -> Optional[str]:
@@ -65,15 +145,6 @@ def _extract_authenticated_student_code(query: str) -> Optional[str]:
     return codes[0].upper() if codes else None
 
 
-def _looks_like_score_query(query: str) -> bool:
-    normalized = _strip_accents(query)
-    score_keywords = [
-        "diem", "gpa", "diem trung binh", "diem tich luy",
-        "ket qua hoc tap", "mon hoc", "hoc ky", "tin chi",
-    ]
-    return any(keyword in normalized for keyword in score_keywords)
-
-
 def _looks_like_student_info_query(query: str) -> bool:
     normalized = _strip_accents(query)
     info_keywords = [
@@ -83,37 +154,62 @@ def _looks_like_student_info_query(query: str) -> bool:
     return any(keyword in normalized for keyword in info_keywords)
 
 
-def _extract_semester(query: str) -> Optional[str]:
-    normalized = _strip_accents(query).replace("_", "-")
-    match = SEMESTER_RE.search(normalized)
-    if match:
-        return f"ki{match.group(1)}-{match.group(2)}-{match.group(3)}"
+def _build_score_query_plan(query: str, student_code: str, force_student: bool = False) -> Optional[ScoreQueryPlan]:
+    prompt = f"""
+You convert a user's natural-language student score request into a database query plan.
 
-    year_match = re.search(r"(?:hoc ky|ky|ki|hk)\s*([1-4]).*?(\d{4})\s*[-/]\s*(\d{4})", normalized)
-    if year_match:
-        return f"ki{year_match.group(1)}-{year_match.group(2)}-{year_match.group(3)}"
+Return only the structured fields requested by the schema.
 
-    return None
+Rules:
+- Understand Vietnamese and English naturally. Do not rely on fixed phrases.
+- is_score_query is true for questions about grades/scores, transcript, semester result,
+  subject/course score, GPA, cumulative average, grade letter, 4-point scale, or credits.
+- If the user selected student mode, treat broad academic-result requests as score queries.
+- Normalize explicit academic terms to kiN-YYYY-YYYY.
+- If the user refers to the current, nearest, or most recent academic term, set semester_scope="latest"
+  and leave semester null.
+- If no semester is mentioned, set semester_scope="all".
+- Extract subject_name only when a specific course/subject is being asked about.
+  Keep only the course/subject name, not surrounding request text.
+- wants_gpa_4 is true for GPA/4-point scale/letter grade/grade coefficient requests.
+- wants_average is true for average, cumulative, GPA, summary, or ranking requests.
+- wants_details is false only when the user asks for just one summary number.
 
-
-def _extract_subject_name(query: str) -> Optional[str]:
-    normalized = _strip_accents(query)
-    if "mon" not in normalized and "mon hoc" not in normalized:
-        return None
-
-    cleaned = re.sub(r"My authenticated student code is.*?\n\n", "", query or "", flags=re.IGNORECASE | re.DOTALL)
-    patterns = [
-        r"(?:môn học|môn)\s+(.+?)(?:\s+(?:trong|ở|hoc ky|học kỳ|kỳ|ki|hk)\b|[?.!,]|$)",
-        r"(?:điểm|diem)\s+(?:môn học|môn)\s+(.+?)(?:\s+(?:trong|ở|hoc ky|học kỳ|kỳ|ki|hk)\b|[?.!,]|$)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, cleaned, flags=re.IGNORECASE)
-        if match:
-            subject = match.group(1).strip(" :;-")
-            subject_norm = _strip_accents(subject)
-            if subject and subject_norm not in {"cua toi", "toi", "tu dau toi gio", "hoc ky nay"}:
-                return subject
-    return None
+Authenticated student code: {student_code}
+Student mode forced: {force_student}
+User request:
+{query}
+"""
+    try:
+        extraction = get_llm().with_structured_output(ScoreQueryExtraction).invoke(prompt)
+        if isinstance(extraction, dict):
+            extraction = ScoreQueryExtraction(**extraction)
+        if not extraction.is_score_query:
+            return None
+        semester_scope = extraction.semester_scope if extraction.semester_scope in {"all", "latest", "specific"} else "all"
+        semester = extraction.semester or None
+        if semester:
+            semester = semester.lower().replace("_", "-").replace("/", "-")
+            if not re.match(r"^(ki|k)[1-4]-\d{4}-\d{4}$", semester):
+                semester = None
+            else:
+                semester_scope = "specific"
+        if semester_scope == "specific" and not semester:
+            semester_scope = "all"
+        return ScoreQueryPlan(
+            student_code=student_code,
+            semester=semester,
+            semester_scope=semester_scope,
+            subject_name=(extraction.subject_name or "").strip() or None,
+            wants_average=bool(extraction.wants_average or force_student),
+            wants_gpa_4=bool(extraction.wants_gpa_4),
+            wants_details=bool(extraction.wants_details),
+        )
+    except Exception as e:
+        logger.warning(f"LLM score query extraction failed; score request will not be guessed locally: {e}")
+        if not force_student:
+            return None
+        return ScoreQueryPlan(student_code=student_code, wants_average=True, wants_gpa_4=True)
 
 
 def _score_value(score) -> Optional[float]:
@@ -142,75 +238,147 @@ def _calculate_gpa(scores) -> Tuple[Optional[float], int]:
     return round(total_weighted / total_credits, 2), total_credits
 
 
+def _grade_point(score) -> Optional[float]:
+    score_text = (getattr(score, "score_text", None) or "").strip().upper()
+    if score_text in GRADE_POINTS:
+        return GRADE_POINTS[score_text]
+
+    value = _score_value(score)
+    if value is None:
+        return None
+    if value >= 8.5:
+        return 4.0
+    if value >= 8.0:
+        return 3.5
+    if value >= 7.0:
+        return 3.0
+    if value >= 6.5:
+        return 2.5
+    if value >= 5.5:
+        return 2.0
+    if value >= 5.0:
+        return 1.5
+    if value >= 4.0:
+        return 1.0
+    return 0.0
+
+
+def _calculate_gpa_4(scores) -> Tuple[Optional[float], int]:
+    total_credits = 0
+    total_weighted = 0.0
+    for score in scores:
+        grade_point = _grade_point(score)
+        credits = _credit_value(score)
+        if grade_point is None or credits <= 0:
+            continue
+        total_credits += credits
+        total_weighted += grade_point * credits
+    if total_credits <= 0:
+        return None, 0
+    return round(total_weighted / total_credits, 2), total_credits
+
+
+def _semester_sort_key(semester: Optional[str]) -> Tuple[int, int]:
+    match = re.search(r"(?:ki|k)([1-4])-(\d{4})-(\d{4})", semester or "", re.IGNORECASE)
+    if not match:
+        return (0, 0)
+    return (int(match.group(3)), int(match.group(1)))
+
+
 def _latest_semester(scores) -> Optional[str]:
-    semesters = [score.semester for score in scores if getattr(score, "semester", None)]
-    return semesters[0] if semesters else None
+    semesters = {score.semester for score in scores if getattr(score, "semester", None)}
+    return max(semesters, key=_semester_sort_key) if semesters else None
 
 
-def _format_scores_answer(scores, student_code: str, query: str, semester_filter: Optional[str], subject_name: Optional[str]) -> str:
-    if not scores:
-        parts = [f"Không tìm thấy điểm của tài khoản `{student_code}`"]
-        if semester_filter:
-            parts.append(f"trong học kỳ `{semester_filter}`")
-        if subject_name:
-            parts.append(f"cho môn `{subject_name}`")
-        return " ".join(parts) + "."
+def _format_score_number(value: Optional[float]) -> str:
+    if value is None:
+        return "-"
+    return f"{value:.2f}".rstrip("0").rstrip(".")
 
-    normalized = _strip_accents(query)
-    wants_latest = any(kw in normalized for kw in ["hoc ky nay", "ky nay", "ki nay", "gan nhat", "moi nhat"])
-    if wants_latest and not semester_filter:
+
+def _format_scores_answer(scores, plan: ScoreQueryPlan) -> str:
+    if plan.semester_scope == "latest" and not plan.semester:
         latest = _latest_semester(scores)
         if latest:
             scores = [score for score in scores if score.semester == latest]
-            semester_filter = latest
+            plan.semester = latest
 
-    overall_gpa, overall_credits = _calculate_gpa(scores)
+    if not scores:
+        parts = [f"Không tìm thấy điểm của tài khoản `{plan.student_code}`"]
+        if plan.semester:
+            parts.append(f"trong học kỳ `{plan.semester}`")
+        if plan.subject_name:
+            parts.append(f"cho môn `{plan.subject_name}`")
+        return " ".join(parts) + "."
+
+    scores = sorted(
+        scores,
+        key=lambda score: (_semester_sort_key(getattr(score, "semester", None)), getattr(getattr(score, "subject", None), "subject_name", "")),
+        reverse=True,
+    )
+
+    gpa_10, gpa_credits = _calculate_gpa(scores)
+    gpa_4, gpa_4_credits = _calculate_gpa_4(scores)
     title = "Điểm của bạn"
-    if semester_filter:
-        title += f" trong học kỳ `{semester_filter}`"
-    elif any(kw in normalized for kw in ["tu dau", "tich luy", "gpa tong", "tong", "den gio"]):
+    if plan.semester:
+        title += f" trong học kỳ `{plan.semester}`"
+    elif plan.semester_scope == "all":
         title += " từ đầu đến giờ"
-    if subject_name:
-        title += f" - môn `{subject_name}`"
+    if plan.subject_name:
+        title += f" - môn `{plan.subject_name}`"
 
     lines = [f"**{title}**", ""]
-    lines.append("| Học kỳ | Môn học | Số tín chỉ | Điểm |")
-    lines.append("|---|---|---:|---:|")
-    for score in scores:
-        subject = getattr(score, "subject", None)
-        subject_label = getattr(subject, "subject_name", "-") if subject else "-"
-        credits = _credit_value(score)
-        score_value = _score_value(score)
-        score_text = "-" if score_value is None else f"{score_value:.2f}".rstrip("0").rstrip(".")
-        lines.append(f"| {score.semester or '-'} | {subject_label} | {credits} | {score_text} |")
+    if plan.wants_details:
+        lines.append("| Học kỳ | Môn học | Tín chỉ | Điểm hệ 10 | Điểm chữ | Hệ 4 |")
+        lines.append("|---|---|---:|---:|---:|---:|")
+        for score in scores:
+            subject = getattr(score, "subject", None)
+            subject_label = getattr(subject, "subject_name", "-") if subject else "-"
+            lines.append(
+                f"| {score.semester or '-'} | {subject_label} | {_credit_value(score)} | "
+                f"{_format_score_number(_score_value(score))} | {getattr(score, 'score_text', None) or '-'} | "
+                f"{_format_score_number(_grade_point(score))} |"
+            )
+        lines.append("")
 
-    lines.append("")
-    if overall_gpa is None:
-        lines.append("**GPA:** Chưa đủ dữ liệu tín chỉ/điểm để tính.")
+    if gpa_10 is None:
+        lines.append("**Điểm trung bình hệ 10:** Chưa đủ dữ liệu tín chỉ/điểm để tính.")
     else:
-        gpa_label = "GPA học kỳ" if semester_filter else "GPA tổng"
-        lines.append(f"**{gpa_label}: {overall_gpa}** trên {overall_credits} tín chỉ.")
+        label = "Điểm trung bình học kỳ" if plan.semester else "Điểm trung bình tích lũy"
+        lines.append(f"**{label}: {gpa_10}** trên {gpa_credits} tín chỉ.")
 
-    if not semester_filter and not subject_name:
+    if plan.wants_gpa_4 or plan.wants_average:
+        if gpa_4 is None:
+            lines.append("**GPA hệ 4:** Chưa đủ dữ liệu điểm chữ/hệ số để tính.")
+        else:
+            gpa_4_label = "GPA học kỳ hệ 4" if plan.semester else "GPA tích lũy hệ 4"
+            lines.append(f"**{gpa_4_label}: {gpa_4}** trên {gpa_4_credits} tín chỉ.")
+
+    if not plan.semester and not plan.subject_name and len({score.semester for score in scores}) > 1:
         by_semester = {}
         for score in scores:
             by_semester.setdefault(score.semester or "Không rõ học kỳ", []).append(score)
         lines.append("")
-        lines.append("**GPA theo từng học kỳ:**")
-        for semester, semester_scores in by_semester.items():
+        lines.append("**Theo từng học kỳ:**")
+        for semester, semester_scores in sorted(by_semester.items(), key=lambda item: _semester_sort_key(item[0]), reverse=True):
             semester_gpa, semester_credits = _calculate_gpa(semester_scores)
+            semester_gpa_4, _ = _calculate_gpa_4(semester_scores)
             if semester_gpa is not None:
-                lines.append(f"- `{semester}`: {semester_gpa} ({semester_credits} tín chỉ)")
+                gpa_4_part = f", GPA hệ 4 {semester_gpa_4}" if semester_gpa_4 is not None else ""
+                lines.append(f"- `{semester}`: TB hệ 10 {semester_gpa}{gpa_4_part} ({semester_credits} tín chỉ)")
 
     return "\n".join(lines)
 
 
-async def _handle_student_query_directly(query: str) -> Optional[AIMessage]:
+async def _handle_student_query_directly(query: str, force_student: bool = False) -> Optional[AIMessage]:
     student_code = _extract_authenticated_student_code(query)
     if not student_code:
         return None
 
-    if _looks_like_student_info_query(query) and not _looks_like_score_query(query):
+    wants_student_info = _looks_like_student_info_query(query)
+    score_plan = _build_score_query_plan(query, student_code, force_student=force_student)
+
+    if wants_student_info and not score_plan:
         result = await get_student_info.ainvoke({"student_code": student_code})
         try:
             data = json.loads(result)
@@ -226,14 +394,12 @@ async def _handle_student_query_directly(query: str) -> Optional[AIMessage]:
             f"- Lớp: {student.get('student_class') or '-'}"
         ))
 
-    if not _looks_like_score_query(query):
+    if not score_plan:
         return None
 
-    semester = _extract_semester(query)
-    subject_name = _extract_subject_name(query)
     score_filter = ScoreFilter(
         student_code=student_code,
-        semester=semester,
+        semester=score_plan.semester,
     )
 
     try:
@@ -241,14 +407,14 @@ async def _handle_student_query_directly(query: str) -> Optional[AIMessage]:
     finally:
         await global_db.close()
 
-    if subject_name:
-        subject_query = _strip_accents(subject_name)
+    if score_plan.subject_name:
+        subject_query = _strip_accents(score_plan.subject_name)
         scores = [
             score for score in scores
             if subject_query in _strip_accents(getattr(score.subject, "subject_name", ""))
         ]
 
-    answer = _format_scores_answer(scores, student_code, query, semester, subject_name)
+    answer = _format_scores_answer(scores, score_plan)
     return AIMessage(content=answer)
 
 
@@ -259,21 +425,27 @@ def get_tool_descriptions(tools_list: list) -> str:
     logger.info(f"--- AGENT: Available tools: {[tool.name for tool in tools_list]} ---")
     return descriptions
 
-# Query reformulation prompt
-conversational_prompt = """
-    Given a chat history between an AI chatbot and user
-    that chatbot's message marked with [bot] prefix and user's message marked with [user] prefix,
-    and given the latest user question which might reference context in the chat history,
-    formulate a standalone question which can be understood without the chat history.
-    Do NOT answer the question, just reformulate it if needed and otherwise return it as is.
+# Query contextualization prompt for history-aware RAG retrieval.
+query_contextualization_prompt = """
+    You are a query contextualizer for a conversational RAG system.
+    Given the chat history and the latest user question, rewrite the latest user
+    question into a standalone retrieval query that can be understood without
+    the chat history.
+
+    Rules:
+    - Do NOT answer the question.
+    - Return only the standalone query, with no explanation or prefix.
+    - If the latest question is already standalone, return it unchanged.
+    - Resolve pronouns, ellipsis, and short follow-up questions using the chat history.
+    - Preserve the user's original language.
     
-    CRITICAL: Keep the original language of the user's input (do NOT translate).
-    - If user asks in Vietnamese, respond in Vietnamese
-    - If user asks in English, respond in English
-    - NEVER change the language of the original question
+    CRITICAL:
+    - If user asks in Vietnamese, return Vietnamese.
+    - If user asks in English, return English.
+    - Never translate the query into another language.
     
     ** History **
-    This is chat history:
+    This is the recent chat history. Older turns may be omitted:
     {chat_history}
     
     ** Latest user question **
@@ -282,21 +454,20 @@ conversational_prompt = """
     """
 
 
-async def summarize_conversation(state: MyAgentState) -> MyAgentState:
+async def contextualize_latest_query(state: MyAgentState) -> MyAgentState:
     """
-    Summarize conversation history to provide context for the next query.
-    This helps the model understand the conversation flow.
+    Rewrite the latest user query into a standalone retrieval query when
+    conversation history exists.
     """
-    logger.info("--- AGENT: Summarizing conversation history ---")
+    logger.info("--- AGENT: Contextualizing latest query with chat history ---")
     
     messages = state["messages"]
     
-    # If there are fewer than 3 messages, no need to summarize
     if len(messages) < 1:
         return state
     
     # Get the latest user query
-    latest_query = messages[-1].content
+    latest_query = _message_content_to_text(messages[-1].content)
     
     # CRITICAL: Check if message has file attachment context
     # If it does, SKIP reformulation to preserve the [DOCUMENT CONTEXT] marker
@@ -310,17 +481,22 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
         logger.info("Student auth context detected in query - SKIPPING reformulation to preserve access control context")
         return state
     
-    # The conversational context prompt helps rewrite the latest query with context
+    # The contextualizer uses chat history to rewrite follow-up questions into
+    # standalone retrieval queries. It also returns standalone questions unchanged.
     llm = get_llm()  # Use factory method to support runtime model switching
     
-    # Format the chat history for the summarization prompt
+    # Format only the latest turns for the contextualization prompt.
     chat_history = []
-    for i, msg in enumerate(messages[:-1]):  # Exclude the most recent message
+    recent_messages = messages[:-1][-CONTEXTUALIZER_HISTORY_MESSAGES:]
+    for msg in recent_messages:  # Exclude the most recent message
         prefix = "[bot]" if isinstance(msg, AIMessage) else "[user]"
-        chat_history.append(f"{prefix} {msg.content}")
+        content = _truncate_for_contextualizer(msg.content)
+        if content:
+            chat_history.append(f"{prefix} {content}")
 
-    logger.info("--- AGENT: Summarizing conversation history ---")
+    logger.info("--- AGENT: Contextualizing latest query ---")
     logger.info(f"Latest query: {latest_query}")
+    logger.info(f"Using {len(chat_history)} recent history messages for contextualization")
     logger.info(f"Chat history: {chat_history}")
 
     chat_history_str = "" + "\n".join(chat_history)
@@ -328,40 +504,29 @@ async def summarize_conversation(state: MyAgentState) -> MyAgentState:
     if len(chat_history_str) == 0:
         return state
 
-    # Check if query is already standalone and in Vietnamese
-    # Skip summarization to avoid language conversion
-    def is_vietnamese_and_standalone(query):
-        vietnamese_chars = any(ord(c) > 127 for c in query)  # Contains non-ASCII
-        reference_words = ['này', 'kia', 'đó', 'đây', 'trước', 'sau', 'ở trên', 'vừa nói']
-        has_references = any(word in query.lower() for word in reference_words)
-        return vietnamese_chars and not has_references
-    
-    if is_vietnamese_and_standalone(latest_query):
-        logger.info(f"🇻🇳 Skipping summarization for Vietnamese standalone query: {latest_query}")
-        return state
-
     logger.info(f"Chat history str: {chat_history_str}")
     
     # Invoke the rewriting prompt with the formatted chat history
     try:
         standalone_query = llm.invoke(
-            conversational_prompt.format(
+            query_contextualization_prompt.format(
                 chat_history=chat_history_str,
                 question=latest_query
             )
         )
         
         # Replace the latest message with the reformulated query
-        contextual_message = HumanMessage(content=standalone_query.content)
+        contextualized_query = _message_content_to_text(getattr(standalone_query, "content", standalone_query)).strip()
+        contextual_message = HumanMessage(content=contextualized_query or latest_query)
 
-        logger.info("--- AGENT: Contextual message ---")
-        logger.info(f"Contextual message: {contextual_message}")
+        logger.info("--- AGENT: Contextualized query ---")
+        logger.info(f"Contextualized query: {contextual_message.content}")
         
         # Return new state with all previous messages and the reformulated query
         return {"messages": messages[:-1] + [contextual_message]}
     except Exception as e:
-        logger.error(f"Error summarizing conversation: {e}")
-        # If summarization fails, continue with original messages
+        logger.error(f"Error contextualizing latest query: {e}")
+        # If contextualization fails, continue with original messages.
         return state
 
 
@@ -389,20 +554,34 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
     logger.info(f"Available tools: {[tool.name for tool in tools]}")
     logger.info(f"Tool descriptions length: {len(tool_descriptions)}")
     
-    # FORCE tool call for ALL queries EXCEPT:
-    # 1. Personal student score queries
-    # 2. Queries with file attachments (already augmented with context)
+    chat_mode = state.get("chat_mode") or "auto"
+
+    # Student score/info mode is resolved before ReAct. Remaining tool calls are
+    # for document/regulation retrieval, except uploaded document context.
     last_message = state["messages"][-1] if state["messages"] else None
     force_rag_tool = False
     
     if last_message and isinstance(last_message, HumanMessage):
-        direct_student_response = await _handle_student_query_directly(last_message.content)
-        if direct_student_response:
-            logger.info("✅ Direct student score/info handler returned response; skipping Gemini tool calling")
-            return {"messages": state["messages"] + [direct_student_response]}
+        message_text = _message_content_to_text(last_message.content)
+        if chat_mode == "student":
+            direct_student_response = await _handle_student_query_directly(
+                message_text,
+                force_student=True,
+            )
+            if direct_student_response:
+                logger.info("Student mode selected; direct score/info handler returned response")
+                return {"messages": state["messages"] + [direct_student_response]}
 
-        query_lower = last_message.content.lower()
-        query = last_message.content
+            return {"messages": state["messages"] + [AIMessage(content="Tôi chưa thể lấy dữ liệu sinh viên cho yêu cầu này. Vui lòng kiểm tra mã sinh viên trong hồ sơ và thử lại.")]}
+
+        if chat_mode != "document":
+            direct_student_response = await _handle_student_query_directly(message_text)
+            if direct_student_response:
+                logger.info("Direct student score/info handler returned response; skipping LLM tool calling")
+                return {"messages": state["messages"] + [direct_student_response]}
+
+        query_lower = message_text.lower()
+        query = message_text
         
         # Check if message already has file attachment context
         has_file_context = "[DOCUMENT CONTEXT]" in query
@@ -411,53 +590,24 @@ async def call_model_no_human_loop(state: MyAgentState) -> MyAgentState:
         if has_file_context:
             logger.info("✅ Message has file attachment context, skipping force RAG tool")
             force_rag_tool = False
+        elif chat_mode == "document":
+            force_rag_tool = True
+            logger.info(f"Document mode selected; forcing search_kma_regulations for: {query[:100]}...")
         else:
-            # Detect student code patterns (AT170139, CT180456, DT190789, etc.)
-            import re
-            student_code_pattern = re.compile(r'\b[ACDMT]T\d{6}\b', re.IGNORECASE)
-            has_student_code = bool(student_code_pattern.search(query))
-            
-            # Check if this is a PERSONAL query (score OR info - needs student_code)
-            personal_score_keywords = ['điểm của', 'điểm em', 'điểm tôi', 'điểm mình', 'điểm sinh viên', 
-                                       'gpa của', 'gpa em', 'gpa tôi', 'gpa mình',
-                                       'xem điểm', 'tra điểm', 'kiểm tra điểm']
-            personal_info_keywords = ['thông tin của', 'thông tin em', 'thông tin tôi', 'thông tin sinh viên',
-                                      'lớp của', 'lớp em', 'lớp tôi',
-                                      'họ tên của', 'họ tên em', 'tên của', 'tên em']
-            
-            personal_score_keywords += [
-                'điểm của', 'điểm em', 'điểm tôi', 'điểm mình', 'điểm sinh viên',
-                'gpa của', 'gpa em', 'gpa tôi', 'gpa mình',
-                'xem điểm', 'tra điểm', 'kiểm tra điểm',
-                'điểm học kỳ', 'điểm trung bình', 'điểm tích lũy', 'kết quả học tập',
-            ]
-            personal_info_keywords += [
-                'thông tin của', 'thông tin em', 'thông tin tôi', 'thông tin mình',
-                'thông tin sinh viên', 'lớp của', 'lớp em', 'lớp tôi', 'lớp mình',
-                'họ tên của', 'họ tên em', 'tên của', 'tên em',
-            ]
-
-            is_personal_score = any(kw in query_lower for kw in personal_score_keywords) and has_student_code
-            is_personal_info = any(kw in query_lower for kw in personal_info_keywords) and has_student_code
-            
-            # FORCE search_kma_regulations for EVERYTHING EXCEPT personal queries
-            if not (is_personal_score or is_personal_info):
-                force_rag_tool = True
-                logger.info(f"🔴 FORCING search_kma_regulations for: {query[:100]}...")
-    
+            force_rag_tool = True
+            logger.info(f"Auto mode non-student query; forcing search_kma_regulations for: {query[:100]}...")
     # If forcing tool call, inject it directly
     if force_rag_tool:
-        from langchain_core.messages import ToolMessage
         
         # Extract query (remove document context if present)
-        query = last_message.content
+        query = _message_content_to_text(last_message.content)
         if "[DOCUMENT CONTEXT]" in query:
             # This shouldn't happen since we check earlier, but just in case
             query = query.split("[DOCUMENT CONTEXT]")[0].strip()
         
-        # Use department from state if provided, otherwise detect from keywords
+        # Use department from state if provided, otherwise detect from keywords in legacy auto mode.
         department = state.get('department')
-        if not department:
+        if not department and chat_mode != "document":
             # Fallback to keyword detection
             if any(kw in query_lower for kw in ['thi', 'kiểm tra', 'đình chỉ', 'phúc khảo', 'khảo thí']):
                 department = 'phongkhaothi'
@@ -529,16 +679,16 @@ Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhấ
 📋 QUY TẮC QUAN TRỌNG:
 1. ✅ Nếu message chứa [DOCUMENT CONTEXT]: Trả lời trực tiếp dựa trên tài liệu, KHÔNG gọi search_kma_regulations
 2. ✅ Nếu không có [DOCUMENT CONTEXT] và là câu hỏi về quy định: Gọi search_kma_regulations
-3. ✅ Nếu là câu hỏi về điểm cá nhân + có student code: Gọi score tool
+3. ✅ Nếu là câu hỏi về điểm cá nhân + có student code: đã được xử lý trước bước ReAct bằng LLM structured extraction
 4. ⚠️ KHÔNG bao giờ bỏ qua tài liệu được upload - đó là ưu tiên hàng đầu"""
     
     permission_rules = """
 
 ### STUDENT DATA PERMISSION RULES
-- For score or student information questions, only use the authenticated student code injected by the backend: "My authenticated student code is ...".
-- Do not ask the user to type a student code for personal queries like "điểm của tôi", "thông tin của tôi", "GPA của tôi", or "điểm học kỳ này của tôi".
+- Personal score questions are handled before this ReAct prompt by a structured LLM query planner and direct database access.
+- For any remaining student information response, only use the authenticated student code injected by the backend: "My authenticated student code is ...".
 - Never use a different student code from the user's message or chat history.
-- If the user tries to view another student's scores or personal information, answer exactly: "Bạn chỉ được xem điểm và thông tin của mình."
+- If the user tries to view another student's personal information, answer exactly: "Bạn chỉ được xem điểm và thông tin của mình."
 """
 
     citation_rules = """
@@ -552,7 +702,7 @@ Trả lời: "Theo tài liệu bạn vừa chia sẻ, điểm quan trọng nhấ
 - Never show internal reasoning, checklists, drafts, "User Question", "Constraints", "Draft", or answer-quality notes. Return only the final user-facing answer.
 """
 
-    enhanced_prompt = react_prompt.format(tool_descriptions=tool_descriptions) + few_shot_examples + permission_rules + citation_rules
+    enhanced_prompt = system_prompt.format(tool_descriptions=tool_descriptions) + few_shot_examples + permission_rules + citation_rules
     
     prompt = ChatPromptTemplate.from_messages(
         [("system", enhanced_prompt),
@@ -640,15 +790,15 @@ class ReActGraph:
         logger.info("___Creating workflow graph___")
 
         workflow = StateGraph(self.state)
-        workflow.add_node("summarize", summarize_conversation)
+        workflow.add_node("contextualize", contextualize_latest_query)
         workflow.add_node("agent", self.call_model_no_human_loop)
         workflow.add_node("action", self.tool_node)
         
-        # Set entry point to the summarization node
-        workflow.set_entry_point("summarize")
+        # Set entry point to the query contextualization node
+        workflow.set_entry_point("contextualize")
         
-        # After summarization, always go to agent
-        workflow.add_edge("summarize", "agent")
+        # After contextualization, always go to agent
+        workflow.add_edge("contextualize", "agent")
         
         # From agent, conditionally go to action or end
         workflow.add_conditional_edges("agent", self.should_continue_no_human_loop, {"action": "action", END: END})
@@ -699,7 +849,7 @@ class ReActGraph:
 
         return current_messages
         
-    async def chat_with_memory(self, conversation_history: List[BaseMessage], query: str, department: str = None) -> List[BaseMessage]:
+    async def chat_with_memory(self, conversation_history: List[BaseMessage], query: str, department: str = None, chat_mode: str = "auto") -> List[BaseMessage]:
         """
         Process a query while maintaining conversation history.
         
@@ -707,6 +857,7 @@ class ReActGraph:
             conversation_history: Previous messages in the conversation
             query: The new user query to process
             department: Optional department to route the query to
+            chat_mode: Explicit route mode, usually 'document' or 'student'
             
         Returns:
             Updated conversation history with the agent's response
@@ -715,7 +866,11 @@ class ReActGraph:
         updated_history = conversation_history.copy() + [HumanMessage(content=query)]
         
         # Prepare the initial state with the full conversation history
-        initial_state = {"messages": updated_history, "department": department}
+        initial_state = {
+            "messages": updated_history,
+            "department": department,
+            "chat_mode": chat_mode,
+        }
         
         # Create the workflow if it doesn't exist
         if self.workflow is None:

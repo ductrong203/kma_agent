@@ -5,14 +5,14 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
-	summarize(summarize)
+	contextualize(contextualize)
 	agent(agent)
 	action(action)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> summarize;
+	__start__ --> contextualize;
 	action --> agent;
 	agent -.-> action;
-	summarize --> agent;
+	contextualize --> agent;
 	agent -.-> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0

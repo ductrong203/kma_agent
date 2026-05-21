@@ -21,6 +21,53 @@ html.dark .chat-input-container::before {
   background: linear-gradient(to top, var(--surface), transparent);
 }
 
+.chat-mode-row {
+  width: min(100%, 980px);
+  max-width: 980px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-mode-chip {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-bright);
+  color: var(--on-surface-variant);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chat-mode-chip:hover:not(:disabled) {
+  border-color: var(--kma-primary-20);
+  color: var(--kma-primary);
+}
+
+.chat-mode-chip.active {
+  border-color: var(--kma-primary-20);
+  background: var(--kma-primary-10);
+  color: var(--kma-primary);
+}
+
+.chat-mode-chip:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+html.dark .chat-mode-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 .chat-input-wrapper {
   width: min(100%, 980px);
   max-width: 980px;
@@ -568,6 +615,9 @@ html.dark .chat-attachment-item:hover {
 @media (max-width: 768px) {
   .chat-input-container {
     padding: 0 8px 12px;
+    transform: translateY(calc(-1 * var(--mobile-keyboard-offset, 0px)));
+    transition: transform 120ms ease-out;
+    will-change: transform;
   }
 
   .chat-input-wrapper {
@@ -575,6 +625,17 @@ html.dark .chat-attachment-item:hover {
     padding: 8px 10px;
     gap: 6px;
     flex-wrap: wrap;
+  }
+
+  .chat-mode-row {
+    padding: 0 2px;
+    overflow-x: auto;
+  }
+
+  .chat-mode-chip {
+    height: 32px;
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 
   /* Folder takes a row by itself on mobile */

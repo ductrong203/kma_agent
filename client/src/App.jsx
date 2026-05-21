@@ -31,6 +31,7 @@ function ChatApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showStatsPanel, setShowStatsPanel] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState("all"); // Default to 'all'
+  const [chatMode, setChatMode] = useState("document");
   const [folders, setFolders] = useState([]);
   const [authView, setAuthView] = useState("landing"); // 'landing', 'login', 'register'
   const messagesEndRef = useRef(null);
@@ -46,6 +47,12 @@ function ChatApp() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (chatMode === "student" && !(user?.studentCode || user?.student_code)) {
+      setChatMode("document");
+    }
+  }, [chatMode, user]);
 
   // Listen for the showRateLimitStats event
   useEffect(() => {
@@ -281,6 +288,7 @@ function ChatApp() {
     messageText,
     department = null,
     attachmentFileIds = [],
+    requestedChatMode = chatMode,
   ) => {
     if (!messageText.trim() && attachmentFileIds.length === 0) {
       console.error("Cannot send message: Missing message text or attachments");
@@ -295,6 +303,7 @@ function ChatApp() {
       timestamp: new Date().toISOString(),
       department: department,
       attachments: attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
+      chatMode: requestedChatMode,
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -370,6 +379,7 @@ function ChatApp() {
         messageText,
         selectedFolder === "all" ? null : selectedFolder,
         attachmentFileIds.length > 0 ? attachmentFileIds : undefined,
+        requestedChatMode,
         {
           onStatus: (statusText) => {
             if (!hasReceivedDelta && statusText) {
@@ -748,6 +758,9 @@ function ChatApp() {
           folders={folders}
           conversationId={conversationId}
           onNeedLogin={() => setAuthView("login")}
+          chatMode={chatMode}
+          onChatModeChange={setChatMode}
+          canUseStudentMode={Boolean(user?.studentCode || user?.student_code)}
         />
       </div>
     </div>

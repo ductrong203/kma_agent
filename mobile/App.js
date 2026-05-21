@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, SafeAreaView, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import * as Font from "expo-font";
 import { storage } from "./src/storage";
 import { COLORS } from "./src/theme";
@@ -60,29 +61,33 @@ export default function App() {
 
   if (!appReady) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator color={COLORS.primary} size="large" />
-      </SafeAreaView>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.loadingContainer}>
+          <ActivityIndicator color={COLORS.primary} size="large" />
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" backgroundColor={COLORS.surface} />
-      {user ? (
-        <ChatScreen user={user} onLogout={handleLogout} />
-      ) : authMode === "login" ? (
-        <LoginScreen
-          onLoginSuccess={handleLoginSuccess}
-          onSwitchToRegister={() => setAuthMode("register")}
-        />
-      ) : (
-        <RegisterScreen
-          onRegisterSuccess={handleRegisterSuccess}
-          onSwitchToLogin={() => setAuthMode("login")}
-        />
-      )}
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" backgroundColor={COLORS.surface} />
+        {user ? (
+          <ChatScreen user={user} onLogout={handleLogout} />
+        ) : authMode === "login" ? (
+          <LoginScreen
+            onLoginSuccess={handleLoginSuccess}
+            onSwitchToRegister={() => setAuthMode("register")}
+          />
+        ) : (
+          <RegisterScreen
+            onRegisterSuccess={handleRegisterSuccess}
+            onSwitchToLogin={() => setAuthMode("login")}
+          />
+        )}
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

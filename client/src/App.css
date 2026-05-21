@@ -343,6 +343,10 @@ html.dark .chat-app-error {
   overflow-x: hidden;
 }
 
+.chat-app-main.keyboard-open .chat-area {
+  padding-bottom: calc(18px + var(--mobile-keyboard-offset, 0px));
+}
+
 .chat-messages-stream {
   padding-top: 2px;
   width: min(100%, 980px);

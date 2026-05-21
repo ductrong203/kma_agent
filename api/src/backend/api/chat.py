@@ -58,6 +58,7 @@ PRIVATE_INFO_KEYWORDS = [
 ]
 OWN_STUDENT_PERMISSION_MESSAGE = "Bạn chỉ được xem điểm và thông tin của mình."
 MISSING_STUDENT_CODE_MESSAGE = "Tài khoản của bạn chưa có mã sinh viên. Vui lòng cập nhật mã sinh viên để xem điểm hoặc thông tin cá nhân."
+VALID_CHAT_MODES = {"document", "student", "auto"}
 
 # Helper function to check if ObjectId is valid
 def validate_object_id(id: str):
@@ -239,6 +240,44 @@ def authorize_and_augment_student_query(user_query: str, current_user: Any) -> s
         )
 
     return user_query
+
+
+def normalize_chat_mode(chat_mode: Any) -> str:
+    mode = str(chat_mode or "document").strip().lower()
+    if mode not in VALID_CHAT_MODES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="chat_mode phải là 'document' hoặc 'student'.",
+        )
+    return mode
+
+
+def build_student_mode_query(user_query: str, current_user: Any) -> str:
+    own_student_code = get_current_student_code(current_user)
+    requested_codes = extract_student_codes(user_query)
+
+    if not own_student_code:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=MISSING_STUDENT_CODE_MESSAGE,
+        )
+
+    if requested_codes and any(code != own_student_code for code in requested_codes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=OWN_STUDENT_PERMISSION_MESSAGE,
+        )
+
+    return (
+        f"My authenticated student code is {own_student_code}. "
+        "Only use this student code for any score or student information tool call. "
+        "Never use any other student code.\n\n"
+        "The user explicitly selected the student score/info mode. "
+        "Handle the request as a student data lookup. If the user asks generally, show the available score summary. "
+        "If the user asks for the current semester but no exact semester code is provided, "
+        "call get_student_scores without the semester filter and summarize the latest semester available in the returned data.\n\n"
+        f"{user_query}"
+    )
 
 
 def sse_event(event: str, data: Any) -> str:
@@ -546,23 +585,32 @@ async def query_ai(
         logger.error("User ID not found in current_user object")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
     
+    chat_mode = normalize_chat_mode(message.chat_mode)
+
+    if chat_mode == "student" and message.attachments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chế độ hỏi điểm không hỗ trợ đính kèm tài liệu. Vui lòng chuyển sang Hỏi tài liệu.",
+        )
+
     # Get selected folder from message
     selected_folder = message.department
-    
-    # Detect query metadata department using existing logic
-    from rag.retriever import analyze_query_for_metadata_filter
-    query_metadata = analyze_query_for_metadata_filter(message.content)
-    query_metadata_department = query_metadata.get('department') if query_metadata else None
-    
-    # Validate query scope based on folder selection
-    is_allowed, reason = DepartmentFilterService.validate_query_scope(
-        message.content, selected_folder, query_metadata_department
-    )
-    if not is_allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail=reason
+
+    if chat_mode != "student":
+        # Detect query metadata department using existing logic
+        from rag.retriever import analyze_query_for_metadata_filter
+        query_metadata = analyze_query_for_metadata_filter(message.content)
+        query_metadata_department = query_metadata.get('department') if query_metadata else None
+        
+        # Validate query scope based on folder selection
+        is_allowed, reason = DepartmentFilterService.validate_query_scope(
+            message.content, selected_folder, query_metadata_department
         )
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail=reason
+            )
     
     # Kiểm tra rate limit trước khi xử lý tin nhắn - không tính request ở đây
     # vì mỗi cặp câu hỏi và câu trả lời chỉ tính là 1 request
@@ -576,7 +624,12 @@ async def query_ai(
         logger.info("Ignoring client-provided student_code header; using authenticated user profile")
 
     content = message.content
-    augmented_private_content = authorize_and_augment_student_query(content, current_user)
+    if chat_mode == "student":
+        augmented_private_content = build_student_mode_query(content, current_user)
+    elif chat_mode == "auto":
+        augmented_private_content = authorize_and_augment_student_query(content, current_user)
+    else:
+        augmented_private_content = content
 
     logger.info(f"DEBUG QUERY_AI START - message.attachments received from frontend: type={type(message.attachments)}, value={message.attachments}")
 
@@ -673,7 +726,12 @@ async def query_ai(
 
     # Use the chat_with_memory method to get a response with context
     logger.info(f"Processing query with memory: {augmented_content[:100]}..., department: {selected_folder}")
-    updated_history = await agent.chat_with_memory(conversation_history[:-1], augmented_content, department=selected_folder)
+    updated_history = await agent.chat_with_memory(
+        conversation_history[:-1],
+        augmented_content,
+        department=selected_folder,
+        chat_mode=chat_mode,
+    )
     
     # The last message in the updated history is the AI's response
     ai_response = ensure_uploaded_document_source_footer(
@@ -872,14 +930,19 @@ async def department_specific_query(
         # Use authenticated user's student code only; never trust client-provided header
         if student_code:
             logger.info("Ignoring client-provided student_code header; using authenticated user profile")
-        content = authorize_and_augment_student_query(message.content, current_user)
+        chat_mode = normalize_chat_mode(message.chat_mode)
+        content = (
+            build_student_mode_query(message.content, current_user)
+            if chat_mode == "student"
+            else message.content
+        )
         
         logger.info(f"Department query - Department: {department}")
         logger.info(f"Query: {content}")
         
         # Use agent to process the query with department parameter
         import asyncio
-        result = await agent.chat_with_memory([], content, department=department)
+        result = await agent.chat_with_memory([], content, department=department, chat_mode=chat_mode)
         
         # Get the final response from agent
         if result and len(result) > 0:
@@ -929,23 +992,26 @@ async def quick_chat(
         logger.error("User ID not found in current_user object")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User ID not found")
     
+    chat_mode = normalize_chat_mode(message.chat_mode)
+
     # Get selected folder from message
     selected_folder = message.department
     
-    # Detect query metadata department using existing logic
-    from rag.retriever import analyze_query_for_metadata_filter
-    query_metadata = analyze_query_for_metadata_filter(message.content)
-    query_metadata_department = query_metadata.get('department') if query_metadata else None
-    
-    # Validate query scope based on folder selection
-    is_allowed, reason = DepartmentFilterService.validate_query_scope(
-        message.content, selected_folder, query_metadata_department
-    )
-    if not is_allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail=reason
+    if chat_mode != "student":
+        # Detect query metadata department using existing logic
+        from rag.retriever import analyze_query_for_metadata_filter
+        query_metadata = analyze_query_for_metadata_filter(message.content)
+        query_metadata_department = query_metadata.get('department') if query_metadata else None
+        
+        # Validate query scope based on folder selection
+        is_allowed, reason = DepartmentFilterService.validate_query_scope(
+            message.content, selected_folder, query_metadata_department
         )
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail=reason
+            )
     
     # Kiểm tra rate limit trước khi xử lý tin nhắn - không tính request ở đây
     # vì mỗi cặp câu hỏi và câu trả lời chỉ tính là 1 request
@@ -961,9 +1027,14 @@ async def quick_chat(
     if student_code:
         logger.info("Ignoring client-provided student_code header; using authenticated user profile")
 
-    content = authorize_and_augment_student_query(message.content, current_user)
+    if chat_mode == "student":
+        content = build_student_mode_query(message.content, current_user)
+    elif chat_mode == "auto":
+        content = authorize_and_augment_student_query(message.content, current_user)
+    else:
+        content = message.content
 
-    response = await agent.chat_with_memory([], content)
+    response = await agent.chat_with_memory([], content, department=selected_folder, chat_mode=chat_mode)
     
     # The last message in the response is the AI's answer
     ai_response = normalize_message_content(response[-1].content)

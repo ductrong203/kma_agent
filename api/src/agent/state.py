@@ -9,3 +9,4 @@ from pydantic import BaseModel, Field
 class MyAgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
     department: Optional[str]  # Add department to state
+    chat_mode: Optional[str]  # 'document', 'student', or legacy/auto

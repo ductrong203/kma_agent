@@ -135,6 +135,27 @@ const renderIcon = (name, props) => {
           <Line x1="16" y1="3" x2="14" y2="21" {...props} />
         </>
       );
+    case "book-open":
+      return (
+        <>
+          <Path d="M2 4h7a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" {...props} />
+          <Path d="M22 4h-7a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h8z" {...props} />
+        </>
+      );
+    case "award":
+      return (
+        <>
+          <Circle cx="12" cy="8" r="5" {...props} />
+          <Path d="m8.5 12.2-1.4 8 4.9-2.9 4.9 2.9-1.4-8" {...props} />
+        </>
+      );
+    case "lock":
+      return (
+        <>
+          <Rect x="4" y="11" width="16" height="10" rx="2" {...props} />
+          <Path d="M8 11V7a4 4 0 0 1 8 0v4" {...props} />
+        </>
+      );
     default:
       return <Circle cx="12" cy="12" r="9" {...props} />;
   }

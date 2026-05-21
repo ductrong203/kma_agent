@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FiSend, FiMic, FiMicOff, FiPaperclip, FiX } from "react-icons/fi";
+import { FiSend, FiMic, FiMicOff, FiPaperclip, FiX, FiBookOpen, FiAward, FiLock } from "react-icons/fi";
 import FileUploadPanel from "./FileUploadPanel";
 import "./ChatInput.css";
 
@@ -13,6 +13,9 @@ const ChatInput = ({
   folders = [],
   conversationId,
   onNeedLogin,
+  chatMode = "document",
+  onChatModeChange,
+  canUseStudentMode = false,
 }) => {
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -30,7 +33,7 @@ const ChatInput = ({
       const fileIds = attachmentFileIds.map((f) =>
         typeof f === "string" ? f : f.id,
       );
-      onSendMessage(message, selectedFolder, fileIds);
+      onSendMessage(message, selectedFolder, fileIds, chatMode);
       setMessage("");
       setAttachmentFileIds([]); // Clear attachments after send
       if (textareaRef.current) {
@@ -109,6 +112,7 @@ const ChatInput = ({
   };
 
   const activeFolderValue = selectedFolder || "all";
+  const isStudentMode = chatMode === "student";
 
   const folderItems = useMemo(() => {
     const unique = new Map();
@@ -149,8 +153,93 @@ const ChatInput = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (isStudentMode) {
+      setAttachmentFileIds([]);
+      setIsUploadPanelOpen(false);
+    }
+  }, [isStudentMode]);
+
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    const root = document.documentElement;
+    const container = document.querySelector(".chat-app-main");
+
+    const updateKeyboardOffset = () => {
+      const focusedInsideInput = document.activeElement === textareaRef.current;
+      if (!visualViewport || !focusedInsideInput) {
+        root.style.setProperty("--mobile-keyboard-offset", "0px");
+        container?.classList.remove("keyboard-open");
+        return;
+      }
+
+      const keyboardOffset = Math.max(
+        0,
+        window.innerHeight - visualViewport.height - visualViewport.offsetTop,
+      );
+      root.style.setProperty("--mobile-keyboard-offset", `${keyboardOffset}px`);
+      container?.classList.toggle("keyboard-open", keyboardOffset > 24);
+    };
+
+    const handleFocus = () => {
+      updateKeyboardOffset();
+      window.setTimeout(() => {
+        updateKeyboardOffset();
+        textareaRef.current?.scrollIntoView({ block: "nearest" });
+      }, 80);
+    };
+
+    const handleBlur = () => {
+      window.setTimeout(updateKeyboardOffset, 80);
+    };
+
+    const textarea = textareaRef.current;
+    textarea?.addEventListener("focus", handleFocus);
+    textarea?.addEventListener("blur", handleBlur);
+    visualViewport?.addEventListener("resize", updateKeyboardOffset);
+    visualViewport?.addEventListener("scroll", updateKeyboardOffset);
+    window.addEventListener("orientationchange", updateKeyboardOffset);
+
+    return () => {
+      textarea?.removeEventListener("focus", handleFocus);
+      textarea?.removeEventListener("blur", handleBlur);
+      visualViewport?.removeEventListener("resize", updateKeyboardOffset);
+      visualViewport?.removeEventListener("scroll", updateKeyboardOffset);
+      window.removeEventListener("orientationchange", updateKeyboardOffset);
+      root.style.setProperty("--mobile-keyboard-offset", "0px");
+      container?.classList.remove("keyboard-open");
+    };
+  }, []);
+
   return (
     <div className="chat-input-container">
+      <div className="chat-mode-row" aria-label="Chọn chế độ hỏi">
+        <button
+          type="button"
+          className={`chat-mode-chip ${chatMode === "document" ? "active" : ""}`}
+          onClick={() => onChatModeChange?.("document")}
+          disabled={disabled}
+        >
+          <FiBookOpen size={15} />
+          <span>Hỏi tài liệu</span>
+        </button>
+        <button
+          type="button"
+          className={`chat-mode-chip ${isStudentMode ? "active" : ""}`}
+          onClick={() => {
+            if (canUseStudentMode) onChatModeChange?.("student");
+          }}
+          disabled={disabled || !canUseStudentMode}
+          title={
+            canUseStudentMode
+              ? "Hỏi điểm và thông tin sinh viên của tài khoản"
+              : "Cần cập nhật mã sinh viên để dùng chức năng hỏi điểm"
+          }
+        >
+          {canUseStudentMode ? <FiAward size={15} /> : <FiLock size={15} />}
+          <span>Hỏi điểm</span>
+        </button>
+      </div>
       <form onSubmit={handleSubmit}>
         <div className="chat-input-wrapper">
           {/* Folder selector */}
@@ -158,7 +247,7 @@ const ChatInput = ({
             <button
               type="button"
               className="chat-folder-trigger"
-              disabled={disabled}
+              disabled={disabled || isStudentMode}
               onClick={() => setIsFolderOpen((v) => !v)}
               aria-haspopup="listbox"
               aria-expanded={isFolderOpen}
@@ -242,9 +331,9 @@ const ChatInput = ({
           <button
             type="button"
             onClick={() => setIsUploadPanelOpen(true)}
-            disabled={disabled}
+            disabled={disabled || isStudentMode}
             className="chat-attach-btn"
-            title={`Đính kèm tài liệu (${attachmentFileIds.length}/5)`}
+            title={isStudentMode ? "Chế độ hỏi điểm không dùng tài liệu đính kèm" : `Đính kèm tài liệu (${attachmentFileIds.length}/5)`}
           >
             <FiPaperclip size={16} />
             {attachmentFileIds.length > 0 && (

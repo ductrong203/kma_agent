@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,7 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import OutlineIcon from "../components/OutlineIcon";
 import { chatApi, modelApi } from "../api";
 import ChatHeaderBar from "../components/ChatHeaderBar";
@@ -42,6 +43,7 @@ const getGreeting = () => {
 
 const ChatScreen = ({ user, onLogout }) => {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isWide = width >= 820;
   const flatListRef = useRef(null);
 
@@ -56,6 +58,9 @@ const ChatScreen = ({ user, onLogout }) => {
   const [conversations, setConversations] = useState([]);
   const [currentUser, setCurrentUser] = useState(user);
   const [activeModel, setActiveModel] = useState(null);
+  const [chatMode, setChatMode] = useState("document");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const canUseStudentMode = Boolean(currentUser?.studentCode);
 
   useEffect(() => {
     loadConversations();
@@ -63,6 +68,37 @@ const ChatScreen = ({ user, onLogout }) => {
 
     const modelTimer = setInterval(loadActiveModel, 10000);
     return () => clearInterval(modelTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!canUseStudentMode && chatMode === "student") {
+      setChatMode("document");
+    }
+    if (chatMode === "student") {
+      setSelectedFiles([]);
+    }
+  }, [canUseStudentMode, chatMode]);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, []);
 
   const loadConversations = async () => {
@@ -149,6 +185,7 @@ const ChatScreen = ({ user, onLogout }) => {
         conversation_id: conversationId,
         user_id: currentUser.id,
         files: pendingFiles,
+        chat_mode: chatMode,
       });
 
       if (!response.success) {
@@ -286,7 +323,62 @@ const ChatScreen = ({ user, onLogout }) => {
               keyboardShouldPersistTaps="handled"
             />
 
-            <View style={styles.composer}>
+            <View
+              style={[
+                styles.composer,
+                keyboardHeight > 0 && {
+                  paddingBottom: Math.max(SPACING.md, insets.bottom),
+                },
+              ]}
+            >
+              <View style={styles.modeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeChip,
+                    chatMode === "document" && styles.modeChipActive,
+                  ]}
+                  onPress={() => setChatMode("document")}
+                  disabled={loading}
+                >
+                  <OutlineIcon
+                    name="book-open"
+                    size={15}
+                    color={chatMode === "document" ? COLORS.primary : COLORS.onSurfaceVariant}
+                  />
+                  <Text
+                    style={[
+                      styles.modeChipText,
+                      chatMode === "document" && styles.modeChipTextActive,
+                    ]}
+                  >
+                    Hỏi tài liệu
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modeChip,
+                    chatMode === "student" && styles.modeChipActive,
+                    !canUseStudentMode && styles.modeChipDisabled,
+                  ]}
+                  onPress={() => canUseStudentMode && setChatMode("student")}
+                  disabled={loading || !canUseStudentMode}
+                >
+                  <OutlineIcon
+                    name={canUseStudentMode ? "award" : "lock"}
+                    size={15}
+                    color={chatMode === "student" ? COLORS.primary : COLORS.onSurfaceVariant}
+                  />
+                  <Text
+                    style={[
+                      styles.modeChipText,
+                      chatMode === "student" && styles.modeChipTextActive,
+                    ]}
+                  >
+                    Hỏi điểm
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {selectedFiles.length > 0 && (
                 <ScrollView
                   horizontal
@@ -318,7 +410,7 @@ const ChatScreen = ({ user, onLogout }) => {
                 <TouchableOpacity
                   style={styles.attachButton}
                   onPress={() => setFileUploadVisible(true)}
-                  disabled={loading}
+                  disabled={loading || chatMode === "student"}
                 >
                   <OutlineIcon name="paperclip" size={19} color={COLORS.primary} />
                 </TouchableOpacity>
@@ -517,6 +609,39 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceSecondary,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.md,
+  },
+  modeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  modeChip: {
+    minHeight: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: RADIUS.full,
+    backgroundColor: "#fff",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  modeChipActive: {
+    borderColor: COLORS.primary20,
+    backgroundColor: COLORS.primary50,
+  },
+  modeChipDisabled: {
+    opacity: 0.48,
+  },
+  modeChipText: {
+    color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: "800",
+  },
+  modeChipTextActive: {
+    color: COLORS.primary,
   },
   fileChipRow: {
     gap: SPACING.sm,

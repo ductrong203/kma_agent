@@ -17,7 +17,7 @@ const parseSSEPayload = (rawPayload) => {
 
 const chatService = {
   // Department-specific query
-  queryDepartment: async (query, department) => {
+  queryDepartment: async (query, department, chatMode = "document") => {
     try {
       const headers = {
         "Content-Type": "application/json",
@@ -27,6 +27,7 @@ const chatService = {
         `${API_ENDPOINTS.DEPARTMENT_QUERY}?department=${encodeURIComponent(department)}`,
         {
           content: query,
+          chat_mode: chatMode,
         },
         { headers },
       );
@@ -202,7 +203,7 @@ const chatService = {
   },
 
   // Quick chat without saving conversation
-  sendQuickMessage: async (message, department = null) => {
+  sendQuickMessage: async (message, department = null, chatMode = "document") => {
     try {
       const headers = {
         "Content-Type": "application/json",
@@ -213,6 +214,7 @@ const chatService = {
         {
           content: message,
           department: department,
+          chat_mode: chatMode,
         },
         { headers },
       );
@@ -347,6 +349,7 @@ const chatService = {
     message,
     department = null,
     attachments = null,
+    chatMode = "document",
   ) => {
     try {
       console.log(conversationId, message, department, attachments);
@@ -357,7 +360,7 @@ const chatService = {
         return await chatService.queryDepartment(
           message,
           department,
-          attachments,
+          chatMode,
         );
       }
 
@@ -369,6 +372,7 @@ const chatService = {
       const requestBody = {
         content: message,
         is_user: true,
+        chat_mode: chatMode,
       };
 
       // Add department if provided
@@ -429,11 +433,13 @@ const chatService = {
     message,
     department = null,
     attachments = null,
+    chatMode = "document",
     handlers = {},
   ) => {
     const requestBody = {
       content: message,
       is_user: true,
+      chat_mode: chatMode,
     };
 
     if (department) {

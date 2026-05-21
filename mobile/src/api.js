@@ -257,7 +257,7 @@ export const chatApi = {
 
   async sendMessage(payload) {
     try {
-      const { content, conversation_id, files, user_id } = payload;
+      const { content, conversation_id, files, user_id, chat_mode } = payload;
       let activeConversationId = conversation_id;
 
       if (!activeConversationId) {
@@ -286,6 +286,7 @@ export const chatApi = {
         body: JSON.stringify({
           content,
           is_user: true,
+          chat_mode: chat_mode || "document",
           attachments: uploadedFiles.map((file) => file.file_id).filter(Boolean),
         }),
       });

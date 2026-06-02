@@ -28,6 +28,19 @@ async def get_month_start():
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+async def get_quarter_start():
+    """Get first day of current quarter at 00:00:00 UTC"""
+    now = datetime.utcnow()
+    quarter_start_month = ((now.month - 1) // 3) * 3 + 1
+    return now.replace(month=quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+async def get_year_start():
+    """Get first day of current year at 00:00:00 UTC"""
+    now = datetime.utcnow()
+    return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 @router.get("/stats", response_model=BaseResponse[DashboardStats])
 async def get_dashboard_stats(current_user = Depends(require_auth)):
     """
@@ -52,6 +65,16 @@ async def get_dashboard_stats(current_user = Depends(require_auth)):
         month_start = await get_month_start()
         month_end = month_start + timedelta(days=32)
         month_end = month_end.replace(day=1)  # First day of next month
+
+        quarter_start = await get_quarter_start()
+        quarter_end_month = quarter_start.month + 3
+        if quarter_end_month > 12:
+            quarter_end = quarter_start.replace(year=quarter_start.year + 1, month=1)
+        else:
+            quarter_end = quarter_start.replace(month=quarter_end_month)
+
+        year_start = await get_year_start()
+        year_end = year_start.replace(year=year_start.year + 1)
         
         # Get today's stats
         today_stats = await mongodb.db.conversation_stats.aggregate([
@@ -233,6 +256,56 @@ async def get_dashboard_stats(current_user = Depends(require_auth)):
                 "$limit": 5
             }
         ]).to_list(5)
+
+        # Get top users this quarter (by tokens)
+        top_users_quarter = await mongodb.db.conversation_stats.aggregate([
+            {
+                "$match": {
+                    "created_at": {
+                        "$gte": quarter_start,
+                        "$lt": quarter_end
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$username",
+                    "tokens": {"$sum": "$tokens_used"},
+                    "requests": {"$sum": 1}
+                }
+            },
+            {
+                "$sort": {"tokens": -1}
+            },
+            {
+                "$limit": 5
+            }
+        ]).to_list(5)
+
+        # Get top users this year (by tokens)
+        top_users_year = await mongodb.db.conversation_stats.aggregate([
+            {
+                "$match": {
+                    "created_at": {
+                        "$gte": year_start,
+                        "$lt": year_end
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$username",
+                    "tokens": {"$sum": "$tokens_used"},
+                    "requests": {"$sum": 1}
+                }
+            },
+            {
+                "$sort": {"tokens": -1}
+            },
+            {
+                "$limit": 5
+            }
+        ]).to_list(5)
         
         # Format response
         stats_data = DashboardStats(
@@ -258,6 +331,22 @@ async def get_dashboard_stats(current_user = Depends(require_auth)):
                     "requests": user["requests"]
                 }
                 for user in top_users_month
+            ],
+            top_users_quarter=[
+                {
+                    "username": user["_id"],
+                    "tokens": user["tokens"],
+                    "requests": user["requests"]
+                }
+                for user in top_users_quarter
+            ],
+            top_users_year=[
+                {
+                    "username": user["_id"],
+                    "tokens": user["tokens"],
+                    "requests": user["requests"]
+                }
+                for user in top_users_year
             ]
         )
         
@@ -267,6 +356,8 @@ async def get_dashboard_stats(current_user = Depends(require_auth)):
             data=stats_data
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error retrieving dashboard stats: {str(e)}")
         raise HTTPException(

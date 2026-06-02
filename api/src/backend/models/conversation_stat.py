@@ -88,6 +88,8 @@ class DashboardStats(BaseModel):
     user_change_percent: float = 0.0
     top_users_today: list = []
     top_users_month: list = []
+    top_users_quarter: list = []
+    top_users_year: list = []
 
 
 class TopUserResponse(BaseModel):

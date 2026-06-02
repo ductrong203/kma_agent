@@ -6,6 +6,7 @@ import {
   FiArrowUp,
   FiArrowDown,
 } from "react-icons/fi";
+import httpClient from "../../utils/httpClient";
 import "./Dashboard.css";
 
 const Dashboard = () => {
@@ -21,6 +22,8 @@ const Dashboard = () => {
 
   const [topUsers, setTopUsers] = useState([]);
   const [tokenUsage, setTokenUsage] = useState([]);
+  const [tokenUsageQuarter, setTokenUsageQuarter] = useState([]);
+  const [tokenUsageYear, setTokenUsageYear] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -37,39 +40,9 @@ const Dashboard = () => {
           return;
         }
 
-        console.log("Fetching from /api/admin/dashboard/stats...");
-        const apiUrl = "http://192.168.0.102:8000/api/admin/dashboard/stats";
-        const response = await fetch(apiUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        // Check response status
-        if (!response.ok) {
-          const contentType = response.headers.get("content-type") || "";
-          console.warn(
-            `API returned ${response.status}. Content-Type: ${contentType}`,
-          );
-
-          // Use mock data as fallback
-          getMockData();
-          setError(`API error (HTTP ${response.status}) - showing demo data`);
-          return;
-        }
-
-        // Check content type BEFORE parsing
-        const contentType = response.headers.get("content-type") || "";
-        if (!contentType.includes("application/json")) {
-          console.error(`Invalid content-type: ${contentType}. Expected JSON.`);
-          getMockData();
-          setError(`Invalid API response (${contentType}) - showing demo data`);
-          return;
-        }
-
         try {
-          const data = await response.json();
+          console.log("Fetching from /api/admin/dashboard/stats...");
+          const data = await httpClient.get("/api/admin/dashboard/stats");
           console.log("API Response:", data);
           const dashboardData = data.data;
 
@@ -109,11 +82,31 @@ const Dashboard = () => {
           );
           setTokenUsage(tokenUsageFormatted);
 
+          const tokenUsageQuarterFormatted = (
+            dashboardData.top_users_quarter || []
+          ).map((user) => ({
+            name: user.username,
+            tokens: user.tokens,
+          }));
+          setTokenUsageQuarter(tokenUsageQuarterFormatted);
+
+          const tokenUsageYearFormatted = (
+            dashboardData.top_users_year || []
+          ).map((user) => ({
+            name: user.username,
+            tokens: user.tokens,
+          }));
+          setTokenUsageYear(tokenUsageYearFormatted);
+
           setError(null);
-        } catch (jsonError) {
-          console.error("Failed to parse JSON:", jsonError);
+        } catch (apiError) {
+          console.error("Failed to fetch dashboard stats:", apiError);
           getMockData();
-          setError("Server response invalid - showing demo data");
+          const status = apiError.response?.status;
+          const message = apiError.response?.data?.detail || apiError.message;
+          setError(
+            `API error${status ? ` (HTTP ${status})` : ""}: ${message} - showing demo data`,
+          );
         }
       } catch (err) {
         console.error("Error fetching dashboard stats:", err);
@@ -143,6 +136,16 @@ const Dashboard = () => {
         { name: "user1", tokens: 8500 },
         { name: "user3", tokens: 7200 },
         { name: "user2", tokens: 6100 },
+      ]);
+      setTokenUsageQuarter([
+        { name: "user1", tokens: 25100 },
+        { name: "user3", tokens: 19800 },
+        { name: "user2", tokens: 17400 },
+      ]);
+      setTokenUsageYear([
+        { name: "user1", tokens: 98500 },
+        { name: "user3", tokens: 86200 },
+        { name: "user2", tokens: 74100 },
       ]);
     };
 
@@ -177,6 +180,36 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+    </div>
+  );
+
+  const TokenUsageTable = ({ title, users }) => (
+    <div className="dashboard-table-card">
+      <h3>{title}</h3>
+      <table className="dashboard-table">
+        <thead>
+          <tr>
+            <th>Tên người dùng</th>
+            <th>Token đã dùng</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.length > 0 ? (
+            users.map((user, idx) => (
+              <tr key={idx}>
+                <td>{user.name}</td>
+                <td>{user.tokens.toLocaleString()}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="2" style={{ textAlign: "center", color: "#9ca3af" }}>
+                Chưa có dữ liệu
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 
@@ -302,6 +335,14 @@ const Dashboard = () => {
                 </tbody>
               </table>
             </div>
+            <TokenUsageTable
+              title="Người dùng sử dụng nhiều token nhất trong quý"
+              users={tokenUsageQuarter}
+            />
+            <TokenUsageTable
+              title="Người dùng sử dụng nhiều token nhất trong năm"
+              users={tokenUsageYear}
+            />
           </div>
         </>
       )}

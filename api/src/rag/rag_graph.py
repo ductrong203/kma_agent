@@ -536,6 +536,7 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
         Dictionary with answer, sources and department decision
     """
     from graph_rag import DepartmentGraphManager
+    from graph_rag.semantic_department_detector import DepartmentDecision
     
     # Create components if not provided
     if retriever is None:
@@ -560,8 +561,65 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
         if user_metadata:
             logger.info(f"👤 User metadata: {user_metadata}")
         
+        docs = []
+        decision = None
+        retrieval_method = "department_graph"
+
+        # User-selected department scope: search only that graph and bypass
+        # semantic permission routing. The selected filter is a search scope,
+        # not the user's own department.
+        if department_filter:
+            target_dept = str(department_filter).strip()
+            logger.info(f"Searching only in explicitly selected department: {target_dept}")
+
+            try:
+                if (
+                    hasattr(retriever, "department_retrievers")
+                    and target_dept not in retriever.department_retrievers
+                    and hasattr(retriever, "load_existing_graphs")
+                ):
+                    logger.info(f"Retriever for {target_dept} not loaded, trying to load existing graphs")
+                    retriever.load_existing_graphs()
+
+                if hasattr(retriever, "department_retrievers") and target_dept in retriever.department_retrievers:
+                    dept_retriever = retriever.department_retrievers[target_dept]
+                    if hasattr(dept_retriever, "_get_relevant_documents"):
+                        docs = dept_retriever._get_relevant_documents(query)[:10]
+                    else:
+                        from langchain_core.documents import Document
+                        results = dept_retriever.retrieve_context(query, k=10)
+                        docs = [
+                            Document(
+                                page_content=result,
+                                metadata={"source": f"{target_dept}_graph"},
+                            )
+                            for result in results
+                        ]
+
+                    for doc in docs:
+                        if hasattr(doc, "metadata"):
+                            doc.metadata["query_department"] = target_dept
+
+                    decision = DepartmentDecision(
+                        chosen_department=target_dept,
+                        confidence=1.0,
+                        signals=[],
+                        reasoning="Explicit department filter selected by user",
+                        conflict_detected=False,
+                        permission_granted=True,
+                    )
+                    retrieval_method = f"explicit_{target_dept}"
+                    logger.info(f"Retrieved {len(docs)} documents from selected department {target_dept}")
+                else:
+                    logger.warning(f"No graph found for selected department: {target_dept}")
+                    retrieval_method = "no_graph"
+            except Exception as e:
+                logger.error(f"Explicit department retrieval failed: {e}")
+                docs = []
+                retrieval_method = "error"
+
         # Use semantic smart query
-        if user_metadata or not department_filter:
+        if not docs and not department_filter:
             logger.info(f"🧠 Using semantic detection for department routing")
             
             # Prepare user metadata
@@ -617,7 +675,21 @@ def process_kma_query_sync(query: str, retriever=None, llm=None, department_filt
                     
                     # Convert to documents
                     from langchain_core.documents import Document
-                    docs = [Document(page_content=result, metadata={'source': f'{department_filter}_graph'}) for result in results]
+                    docs = [
+                        Document(
+                            page_content=result,
+                            metadata={'source': f'{department_filter}_graph', 'query_department': department_filter},
+                        )
+                        for result in results
+                    ]
+                    decision = DepartmentDecision(
+                        chosen_department=department_filter,
+                        confidence=1.0,
+                        signals=[],
+                        reasoning="Explicit department filter selected by user",
+                        conflict_detected=False,
+                        permission_granted=True,
+                    )
                     retrieval_method = f"legacy_{department_filter}"
                 else:
                     logger.warning(f"❌ No graph found for department: {department_filter}")

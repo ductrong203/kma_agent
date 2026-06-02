@@ -15,6 +15,24 @@ from .rag_graph import process_kma_query_sync
 
 logger = logging.getLogger(__name__)
 
+GENERAL_DEPARTMENT_VALUES = {"", "all", "chung", "document_graph", "common"}
+
+
+def _normalize_department_filter(department: Optional[str]) -> Optional[str]:
+    """Return a concrete department id, or None for general/smart search."""
+    if department is None:
+        return None
+
+    normalized = str(department).strip()
+    if not normalized or normalized.lower() in GENERAL_DEPARTMENT_VALUES:
+        return None
+
+    if normalized == "thongtinHVKTMM":
+        return "thongtinhvktmm"
+
+    return normalized.lower()
+
+
 class KMARegulationInput(BaseModel):
     query: str = Field(description="The query to search for in documents")
     department: Optional[str] = Field(default=None, description="Optional department filter: 'phongdaotao', 'phongkhaothi', 'khoa', 'viennghiencuuvahoptacphattrien', 'thongtinhvktmm', or None for smart auto-detection")
@@ -45,28 +63,17 @@ def search_kma_regulations(query: str, department: str = None, user_role: str = 
         logger.info(f"📁 Department filter: {department}")
         logger.info(f"👤 User role: {user_role}, User department: {user_department}")
         
-        # Prepare user metadata for semantic detection
-        # Logic: If this is a department-specific API call (department param exists),
-        # then user made a choice -> use that department
-        # If user_department is explicitly None -> user chose "all" -> use common
-        if user_department is None and department:
-            # This is department-specific API call -> user chose this department
-            user_dept_choice = department
-        else:
-            # Use explicit user_department (including empty string for "no choice")
-            user_dept_choice = user_department or ''
+        selected_department = _normalize_department_filter(department)
+        user_dept_choice = _normalize_department_filter(user_department) or ''
             
         user_metadata = {
             'role': user_role or 'student',
             'department': user_dept_choice
         }
         
-        # Call enhanced query processing
-        # Pass department_filter when user explicitly chose a department
-        effective_department_filter = department if user_dept_choice else None
         result = process_kma_query_sync(
             query=query, 
-            department_filter=effective_department_filter,
+            department_filter=selected_department,
             user_metadata=user_metadata
         )
         

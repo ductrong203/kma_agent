@@ -14,6 +14,10 @@ class DepartmentFilterService:
             'display_name': 'Tất cả',
             'description': 'Tất cả thông tin từ mọi phòng ban và đơn vị'
         },
+        'default': {
+            'display_name': 'Mac dinh',
+            'description': 'Phong ban mac dinh'
+        },
         'phongdaotao': {
             'display_name': 'Phòng Đào tạo',
             'description': 'Thông tin về đào tạo, học tập, tốt nghiệp'
@@ -58,13 +62,17 @@ class DepartmentFilterService:
         if not selected_folder or selected_folder == 'all':
             return True, "General access - all folders allowed"
         
-        # Allow all queries if 'chung', 'default', or any "all" variant is selected
-        if selected_folder in ['chung', 'default']:
+        # Allow all queries if 'chung' or any "all" variant is selected
+        if selected_folder == 'chung':
             return True, "General folder selected - all queries allowed"
         
         # Check if selected folder exists in our mappings
         if selected_folder not in cls.FOLDER_MAPPINGS:
             return False, f"Unknown folder: {selected_folder}"
+
+        # A selected folder is a retrieval scope, not an authorization gate.
+        # Let the RAG layer search only inside that folder's subgraph.
+        return True, f"Scoped search allowed for folder: {selected_folder}"
         
         # If no metadata department detected from query, restrict to specific folders
         if not query_metadata_department:

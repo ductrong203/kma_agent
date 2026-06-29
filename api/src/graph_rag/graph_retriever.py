@@ -82,19 +82,23 @@ class GraphRoutedRetriever(BaseRetriever, BaseModel):
         logger.info(f"Communities: {len(self.partitioner.communities)}")
         logger.info("=" * 60)
         
+        retrieval_query = self._expand_query_for_retrieval(query)
+        if retrieval_query != query:
+            logger.info(f"Expanded retrieval query: {retrieval_query}")
+
         # Step 1: SEMANTIC - Graph-based routing
-        target_subgraphs = self._route_query_automated(query)
+        target_subgraphs = self._route_query_automated(retrieval_query)
         logger.info(f"✅ Semantic routing: {len(target_subgraphs)} communities")
         
         semantic_docs = []
         for subgraph_id, node_ids in target_subgraphs.items():
-            docs = self._search_in_subgraph(query, node_ids)
+            docs = self._search_in_subgraph(retrieval_query, node_ids)
             semantic_docs.extend(docs)
         
         logger.info(f"📄 Semantic: {len(semantic_docs)} documents")
         
         # Step 2: KEYWORD - BM25-like search on ALL nodes
-        keyword_docs = self._keyword_search_all_nodes(query)
+        keyword_docs = self._keyword_search_all_nodes(retrieval_query)
         logger.info(f"🔑 Keyword: {len(keyword_docs)} documents")
         
         # Step 3: MERGE with boosting
@@ -133,11 +137,39 @@ class GraphRoutedRetriever(BaseRetriever, BaseModel):
         
         # Rank by final score
         ranked = sorted(doc_scores.items(), key=lambda x: x[1]['final'], reverse=True)
-        final_docs = [item[1]['doc'] for item in ranked[:self.k]]
+
+        # Keep the strongest lexical matches in the final context. Short factual
+        # table rows can otherwise be displaced by longer semantically similar
+        # chunks, even when they contain the exact requested field.
+        final_docs = []
+        seen_doc_ids = set()
+        for doc in keyword_docs[:2] + [item[1]['doc'] for item in ranked]:
+            doc_id = id(doc)
+            if doc_id not in seen_doc_ids:
+                final_docs.append(doc)
+                seen_doc_ids.add(doc_id)
+            if len(final_docs) >= self.k:
+                break
         
         logger.info(f"📊 Hybrid: {len(doc_scores)} unique docs → top {len(final_docs)} returned")
         logger.info("=" * 60)
         return final_docs
+
+    @staticmethod
+    def _expand_query_for_retrieval(query: str) -> str:
+        """Add canonical document labels for common short factual questions."""
+        query_lower = query.lower()
+        duration_phrases = ("bao nhiêu năm", "mấy năm", "thời gian", "kéo dài")
+        program_phrases = ("chương trình", "đào tạo", "ct ", "ct này")
+
+        if (
+            any(phrase in query_lower for phrase in duration_phrases)
+            and any(phrase in query_lower for phrase in program_phrases)
+            and "thời gian đào tạo" not in query_lower
+        ):
+            return f"{query} thời gian đào tạo chương trình"
+
+        return query
     
     def _route_query_automated(self, query: str) -> Dict[Any, Set[int]]:
         """

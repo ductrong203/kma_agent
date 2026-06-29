@@ -178,6 +178,21 @@ html.dark .sidebar-section-label {
   gap: 4px;
 }
 
+.sidebar-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--on-surface-variant);
+  font-size: 0.75rem;
+}
+
+.sidebar-load-more .sidebar-spinner {
+  width: 16px;
+  height: 16px;
+}
+
 .sidebar-item {
   display: flex;
   align-items: flex-start;

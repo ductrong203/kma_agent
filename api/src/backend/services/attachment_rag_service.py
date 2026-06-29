@@ -388,43 +388,26 @@ class AttachmentRAGService:
 
             results = await self._augment_results_for_document_analysis(query, results, file_ids)
             
-            # Build context
             context_parts = []
-            current_length = 0
             file_name_cache = {}
-            
-            for i, result in enumerate(results, 1):
-                chunk = result.get("text", "")
-                similarity = result.get("similarity", 0)
-                file_id = result.get("file_id")
 
-                if file_id and file_id not in file_name_cache:
-                    try:
-                        file_metadata = await self.file_service.get_file_metadata(file_id)
-                        file_name_cache[file_id] = file_metadata.get(
-                            "original_filename",
-                            file_metadata.get("filename", file_id)
-                        )
-                    except Exception:
-                        file_name_cache[file_id] = file_id or "Unknown"
-
-                filename = file_name_cache.get(file_id, file_id or "Unknown")
-                
-                # Add source reference
-                part = (
-                    f"[Source {i}]\n"
-                    f"File: {filename}\n"
-                    f"File ID: {file_id or 'Unknown'}\n"
-                    f"Chunk: {result.get('chunk_index', 0)}\n"
-                    f"Relevance: {similarity:.2f}\n"
-                    f"{chunk}\n"
+            if file_ids and len(file_ids) > 1:
+                context_parts = await self._build_balanced_multi_file_context(
+                    results=results,
+                    file_ids=file_ids,
+                    max_context_length=max_context_length,
+                    file_name_cache=file_name_cache,
                 )
-                
-                if current_length + len(part) > max_context_length:
-                    continue
-                
-                context_parts.append(part)
-                current_length += len(part)
+            else:
+                current_length = 0
+                for i, result in enumerate(results, 1):
+                    part = await self._format_context_part(i, result, file_name_cache)
+
+                    if current_length + len(part) > max_context_length:
+                        continue
+
+                    context_parts.append(part)
+                    current_length += len(part)
             
             context = "\n".join(context_parts)
             logger.info(f"Built context from {len(context_parts)} chunks, {len(context)} chars")
@@ -434,6 +417,78 @@ class AttachmentRAGService:
         except Exception as e:
             logger.error(f"Error building context: {str(e)}")
             return ""
+
+    async def _format_context_part(self, index: int, result: Dict, file_name_cache: Dict[str, str]) -> str:
+        chunk = result.get("text", "")
+        similarity = result.get("similarity", 0)
+        file_id = result.get("file_id")
+
+        if file_id and file_id not in file_name_cache:
+            try:
+                file_metadata = await self.file_service.get_file_metadata(file_id)
+                file_name_cache[file_id] = file_metadata.get(
+                    "original_filename",
+                    file_metadata.get("filename", file_id)
+                )
+            except Exception:
+                file_name_cache[file_id] = file_id or "Unknown"
+
+        filename = file_name_cache.get(file_id, file_id or "Unknown")
+
+        return (
+            f"[Source {index}]\n"
+            f"File: {filename}\n"
+            f"File ID: {file_id or 'Unknown'}\n"
+            f"Chunk: {result.get('chunk_index', 0)}\n"
+            f"Relevance: {similarity:.2f}\n"
+            f"{chunk}\n"
+        )
+
+    async def _build_balanced_multi_file_context(
+        self,
+        results: List[Dict],
+        file_ids: List[str],
+        max_context_length: int,
+        file_name_cache: Dict[str, str],
+    ) -> List[str]:
+        """Build context with a fair per-file budget so every selected attachment is represented."""
+        grouped: Dict[str, List[Dict]] = {file_id: [] for file_id in file_ids}
+        for result in results:
+            file_id = result.get("file_id")
+            if file_id in grouped:
+                grouped[file_id].append(result)
+
+        for file_id in grouped:
+            grouped[file_id].sort(
+                key=lambda item: (
+                    -float(item.get("similarity", 0)),
+                    int(item.get("chunk_index", 0) or 0),
+                )
+            )
+
+        context_parts = []
+        source_index = 1
+        per_file_budget = max(2500, max_context_length // max(len(file_ids), 1))
+
+        for file_id in file_ids:
+            current_file_length = 0
+            for result in grouped.get(file_id, []):
+                part = await self._format_context_part(source_index, result, file_name_cache)
+                if current_file_length + len(part) > per_file_budget:
+                    continue
+                if sum(len(p) for p in context_parts) + len(part) > max_context_length:
+                    continue
+
+                context_parts.append(part)
+                current_file_length += len(part)
+                source_index += 1
+
+        represented_files = {part.split("File ID: ", 1)[1].split("\n", 1)[0] for part in context_parts if "File ID: " in part}
+        missing_files = [file_id for file_id in file_ids if file_id not in represented_files]
+        if missing_files:
+            logger.warning(f"Attachment context missing files after balancing: {missing_files}")
+
+        return context_parts
 
     async def _augment_results_for_document_analysis(
         self,

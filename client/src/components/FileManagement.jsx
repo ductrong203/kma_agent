@@ -5,6 +5,7 @@ import {
   HiOutlineEye,
 } from "react-icons/hi2";
 import { MdOutlineAutorenew } from "react-icons/md";
+import { API_BASE_URL } from "../utils/constants";
 import "./FileManagement.css";
 
 const FileManagement = ({ sidebarExpanded = true }) => {
@@ -34,7 +35,7 @@ const FileManagement = ({ sidebarExpanded = true }) => {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch("/api/files/", {
+      const response = await fetch(`${API_BASE_URL}/api/files/`, {
         method: "GET",
         headers,
       });
@@ -72,7 +73,7 @@ const FileManagement = ({ sidebarExpanded = true }) => {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/files/${fileId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
         method: "DELETE",
         headers,
       });
@@ -105,7 +106,7 @@ const FileManagement = ({ sidebarExpanded = true }) => {
       }
 
       // Get file content from Milvus via API
-      const response = await fetch(`/api/files/${fileId}/content`, {
+      const response = await fetch(`${API_BASE_URL}/api/files/${fileId}/content`, {
         method: "GET",
         headers,
       });

@@ -72,6 +72,7 @@ export const API_ENDPOINTS = {
   ADMIN_LIST_FOLDERS: "/api/admin/rag/list-folders",
   ADMIN_RENAME_FOLDER: "/api/admin/rag/rename-folder",
   ADMIN_EDIT_FILE: "/api/admin/rag/edit-file",
+  ADMIN_PREVIEW_FILE: "/api/admin/rag/preview-file",
   ADMIN_DOWNLOAD_FILE: "/api/admin/rag/download-file",
 
   // Admin RAG Mode Management endpoints

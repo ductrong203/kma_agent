@@ -763,7 +763,8 @@
 
 .delete-button,
 .edit-button,
-.download-button {
+.download-button,
+.preview-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -775,6 +776,17 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-size: 16px;
+}
+
+.preview-button {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.preview-button:hover {
+  background-color: rgba(139, 92, 246, 0.08);
+  border-color: #7c3aed;
+  color: #7c3aed;
 }
 
 .delete-button {
@@ -823,6 +835,101 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.preview-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.preview-modal {
+  width: min(1000px, 96vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+
+.preview-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.preview-modal-header h3 {
+  margin: 0 0 4px;
+  color: #1e293b;
+}
+
+.preview-modal-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.preview-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  color: #475569;
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.preview-close-button:hover {
+  color: #c2185b;
+  border-color: #c2185b;
+  background: rgba(194, 24, 91, 0.06);
+}
+
+.preview-modal-content {
+  padding: 24px 32px;
+  overflow: auto;
+  color: #1e293b;
+  line-height: 1.7;
+}
+
+.preview-modal-content img {
+  max-width: 100%;
+}
+
+.preview-modal-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.preview-modal-content th,
+.preview-modal-content td {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+}
+
+.preview-modal-content pre {
+  max-width: 100%;
+  padding: 14px;
+  overflow-x: auto;
+  background: #f8fafc;
+  border-radius: 8px;
 }
 
 .loading,

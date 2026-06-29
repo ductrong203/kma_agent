@@ -645,12 +645,19 @@ async def query_ai(
         attachment_context = await attachment_rag_service.build_context_from_attachments(
             query=augmented_private_content,
             file_ids=message.attachments,
-            max_context_length=12000
+            max_context_length=24000 if len(message.attachments) > 1 else 12000
         )
         
         # Augment content with attachment context
         if attachment_context:
-            augmented_content = f"{augmented_private_content}\n\n[DOCUMENT CONTEXT]\n{attachment_context}"
+            multi_file_instruction = ""
+            if len(message.attachments) > 1:
+                multi_file_instruction = (
+                    "The user attached multiple files. If the question asks about all papers/files, "
+                    "use and cite every attached file that appears in the document context. "
+                    "Do not answer from only one file unless the user explicitly asks for one file.\n\n"
+                )
+            augmented_content = f"{augmented_private_content}\n\n{multi_file_instruction}[DOCUMENT CONTEXT]\n{attachment_context}"
         
         # Prepare attachment objects for DB storage
         for file_id in message.attachments:
@@ -919,13 +926,9 @@ async def department_specific_query(
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=error_message)
     
     try:
-        # Import the agent
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        from agent.supervisor_agent import ReActGraph
-        
         # Initialize agent
-        agent = ReActGraph()
-        agent.create_graph()
+        department_agent = ReActGraph()
+        department_agent.create_graph()
         
         # Use authenticated user's student code only; never trust client-provided header
         if student_code:
@@ -942,7 +945,7 @@ async def department_specific_query(
         
         # Use agent to process the query with department parameter
         import asyncio
-        result = await agent.chat_with_memory([], content, department=department, chat_mode=chat_mode)
+        result = await department_agent.chat_with_memory([], content, department=department, chat_mode=chat_mode)
         
         # Get the final response from agent
         if result and len(result) > 0:
@@ -1146,16 +1149,8 @@ async def list_folders():
         # Get all folders including subfolders
         folders.extend(scan_folders(data_dir))
         
-        # Always include "default" at the beginning if not already present
-        if "default" not in folders:
-            folders.insert(0, "default")
-        else:
-            # Move "default" to the beginning if it exists
-            folders.remove("default")
-            folders.insert(0, "default")
-        
-        # Sort folders alphabetically
-        folders.sort()
+        # Return only folders that actually exist in data.
+        folders.sort(key=str.casefold)
         
         logger.info(f"Found {len(folders)} folders in data directory: {folders}")
         

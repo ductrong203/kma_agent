@@ -80,7 +80,11 @@ class ScoreQueryExtraction(BaseModel):
     )
     subject_name: Optional[str] = Field(
         default=None,
-        description="Course/subject name exactly as mentioned by the user, without semester/time words."
+        description=(
+            "Course/subject name to filter the score query by. For requests like "
+            "'điểm môn X' or 'score for course X', this field MUST be X, not null. "
+            "Keep only the course name, without words like điểm, môn, học phần, kỳ, gần đây."
+        )
     )
     wants_average: bool = Field(
         default=False,
@@ -101,6 +105,45 @@ def _strip_accents(text: str) -> str:
         char for char in unicodedata.normalize("NFD", text or "")
         if unicodedata.category(char) != "Mn"
     ).lower()
+
+
+SUBJECT_STOPWORDS = {
+    "mon", "hoc", "phan", "diem", "cua", "toi", "minh", "em", "ban",
+    "va", "voi", "ve", "cho", "ky", "hoc ky", "gan", "day", "nhat",
+}
+
+
+def _normalize_subject_text(text: str) -> str:
+    normalized = _strip_accents(text or "")
+    normalized = re.sub(r"[^a-z0-9\s]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _subject_tokens(text: str) -> List[str]:
+    normalized = _normalize_subject_text(text)
+    return [
+        token for token in normalized.split()
+        if len(token) > 1 and token not in SUBJECT_STOPWORDS
+    ]
+
+
+def _subject_match_score(query: str, subject_name: str) -> float:
+    query_norm = _normalize_subject_text(query)
+    subject_norm = _normalize_subject_text(subject_name)
+    if not query_norm or not subject_norm:
+        return 0.0
+    if query_norm in subject_norm or subject_norm in query_norm:
+        return 1.0
+
+    query_tokens = set(_subject_tokens(query_norm))
+    subject_tokens = set(_subject_tokens(subject_norm))
+    if not query_tokens or not subject_tokens:
+        return 0.0
+
+    overlap = query_tokens & subject_tokens
+    coverage = len(overlap) / len(query_tokens)
+    precision = len(overlap) / len(subject_tokens)
+    return 0.75 * coverage + 0.25 * precision
 
 
 def _message_content_to_text(content) -> str:
@@ -145,6 +188,20 @@ def _extract_authenticated_student_code(query: str) -> Optional[str]:
     return codes[0].upper() if codes else None
 
 
+def _extract_actual_user_request(query: str) -> str:
+    """Remove backend-injected authentication/instruction prefix before query understanding."""
+    text = query or ""
+    marker = "Never use any other student code.\n\n"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+
+    followup_marker = "returned data.\n\n"
+    if followup_marker in text:
+        text = text.split(followup_marker, 1)[1]
+
+    return text.strip() or (query or "")
+
+
 def _looks_like_student_info_query(query: str) -> bool:
     normalized = _strip_accents(query)
     info_keywords = [
@@ -157,6 +214,10 @@ def _looks_like_student_info_query(query: str) -> bool:
 def _build_score_query_plan(query: str, student_code: str, force_student: bool = False) -> Optional[ScoreQueryPlan]:
     prompt = f"""
 You convert a user's natural-language student score request into a database query plan.
+The output is a query plan, not the final answer. Think in terms of SQL filters:
+- student_code is always the authenticated student code.
+- subject_name means a WHERE condition on the course/subject name.
+- semester/semester_scope means a WHERE/order condition on the semester.
 
 Return only the structured fields requested by the schema.
 
@@ -169,11 +230,34 @@ Rules:
 - If the user refers to the current, nearest, or most recent academic term, set semester_scope="latest"
   and leave semester null.
 - If no semester is mentioned, set semester_scope="all".
+- If the user asks "điểm môn X", "điểm học phần X", or asks for a specific course by name,
+  subject_name MUST be exactly X. Do not leave subject_name null.
+- Do not set semester_scope="latest" for a subject request unless the same user request explicitly
+  mentions the latest/current/recent semester.
 - Extract subject_name only when a specific course/subject is being asked about.
   Keep only the course/subject name, not surrounding request text.
+- A query can have both subject_name and semester_scope when the user asks for a course in a term.
 - wants_gpa_4 is true for GPA/4-point scale/letter grade/grade coefficient requests.
 - wants_average is true for average, cumulative, GPA, summary, or ranking requests.
+  It should usually be false for a single-course score question unless the user asks for GPA/average too.
 - wants_details is false only when the user asks for just one summary number.
+
+Examples:
+- User: "điểm môn lập trình web"
+  Plan: is_score_query=true, semester_scope="all", semester=null,
+  subject_name="lập trình web", wants_average=false, wants_gpa_4=false, wants_details=true
+- User: "điểm môn cấu trúc dữ liệu giải thuật"
+  Plan: is_score_query=true, semester_scope="all", semester=null,
+  subject_name="cấu trúc dữ liệu giải thuật", wants_average=false, wants_gpa_4=false, wants_details=true
+- User: "điểm kỳ gần đây nhất"
+  Plan: is_score_query=true, semester_scope="latest", semester=null,
+  subject_name=null, wants_average=true, wants_gpa_4=true, wants_details=true
+- User: "điểm môn lập trình web kỳ gần đây nhất"
+  Plan: is_score_query=true, semester_scope="latest", semester=null,
+  subject_name="lập trình web", wants_average=false, wants_gpa_4=false, wants_details=true
+- User: "điểm của tôi từ đầu đến giờ"
+  Plan: is_score_query=true, semester_scope="all", semester=null,
+  subject_name=null, wants_average=true, wants_gpa_4=true, wants_details=true
 
 Authenticated student code: {student_code}
 Student mode forced: {force_student}
@@ -186,6 +270,17 @@ User request:
             extraction = ScoreQueryExtraction(**extraction)
         if not extraction.is_score_query:
             return None
+        logger.info(
+            "Score query plan extraction: is_score_query=%s, semester_scope=%s, semester=%s, "
+            "subject_name=%s, wants_average=%s, wants_gpa_4=%s, wants_details=%s",
+            extraction.is_score_query,
+            extraction.semester_scope,
+            extraction.semester,
+            extraction.subject_name,
+            extraction.wants_average,
+            extraction.wants_gpa_4,
+            extraction.wants_details,
+        )
         semester_scope = extraction.semester_scope if extraction.semester_scope in {"all", "latest", "specific"} else "all"
         semester = extraction.semester or None
         if semester:
@@ -201,7 +296,7 @@ User request:
             semester=semester,
             semester_scope=semester_scope,
             subject_name=(extraction.subject_name or "").strip() or None,
-            wants_average=bool(extraction.wants_average or force_student),
+            wants_average=bool(extraction.wants_average),
             wants_gpa_4=bool(extraction.wants_gpa_4),
             wants_details=bool(extraction.wants_details),
         )
@@ -209,7 +304,12 @@ User request:
         logger.warning(f"LLM score query extraction failed; score request will not be guessed locally: {e}")
         if not force_student:
             return None
-        return ScoreQueryPlan(student_code=student_code, wants_average=True, wants_gpa_4=True)
+        return ScoreQueryPlan(
+            student_code=student_code,
+            semester_scope="all",
+            wants_average=True,
+            wants_gpa_4=True
+        )
 
 
 def _score_value(score) -> Optional[float]:
@@ -375,8 +475,11 @@ async def _handle_student_query_directly(query: str, force_student: bool = False
     if not student_code:
         return None
 
-    wants_student_info = _looks_like_student_info_query(query)
-    score_plan = _build_score_query_plan(query, student_code, force_student=force_student)
+    user_request = _extract_actual_user_request(query)
+    logger.info(f"Student query understanding input: {user_request}")
+
+    wants_student_info = _looks_like_student_info_query(user_request)
+    score_plan = _build_score_query_plan(user_request, student_code, force_student=force_student)
 
     if wants_student_info and not score_plan:
         result = await get_student_info.ainvoke({"student_code": student_code})
@@ -408,11 +511,22 @@ async def _handle_student_query_directly(query: str, force_student: bool = False
         await global_db.close()
 
     if score_plan.subject_name:
-        subject_query = _strip_accents(score_plan.subject_name)
-        scores = [
-            score for score in scores
-            if subject_query in _strip_accents(getattr(score.subject, "subject_name", ""))
+        scored_subjects = [
+            (
+                score,
+                _subject_match_score(
+                    score_plan.subject_name,
+                    getattr(score.subject, "subject_name", "")
+                )
+            )
+            for score in scores
         ]
+        strong_matches = [score for score, match_score in scored_subjects if match_score >= 0.55]
+        if strong_matches:
+            scores = strong_matches
+        else:
+            best_match = max(scored_subjects, key=lambda item: item[1], default=(None, 0.0))
+            scores = [best_match[0]] if best_match[0] and best_match[1] >= 0.35 else []
 
     answer = _format_scores_answer(scores, score_plan)
     return AIMessage(content=answer)

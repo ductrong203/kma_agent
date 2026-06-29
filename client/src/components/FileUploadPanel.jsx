@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import "./FileUploadPanel.css";
+import { API_BASE_URL } from "../utils/constants";
 import {
   HiOutlineXMark,
   HiOutlineArrowUpTray,
@@ -62,7 +63,7 @@ const FileUploadPanel = ({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch("/api/files/", {
+      const response = await fetch(`${API_BASE_URL}/api/files/`, {
         method: "GET",
         headers,
       });
@@ -155,7 +156,7 @@ const FileUploadPanel = ({
       }
 
       // Upload file - this now automatically processes embeddings
-      const response = await fetch("/api/files/upload", {
+      const response = await fetch(`${API_BASE_URL}/api/files/upload`, {
         method: "POST",
         body: formData,
         headers,
@@ -211,7 +212,7 @@ const FileUploadPanel = ({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/files/${fileId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
         method: "DELETE",
         headers,
       });
@@ -248,7 +249,7 @@ const FileUploadPanel = ({
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/files/${fileId}/content`, {
+      const response = await fetch(`${API_BASE_URL}/api/files/${fileId}/content`, {
         method: "GET",
         headers,
       });

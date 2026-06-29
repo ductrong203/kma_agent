@@ -159,24 +159,9 @@ function ChatApp() {
           console.log("Folders API response:", foldersResponse);
 
           if (foldersResponse.success && foldersResponse.folders.length > 0) {
-            // Map folders to include display names (optional, will show folder name if no mapping)
-            const folderMappings = {
-              default: "Mặc định",
-              phongdaotao: "Phòng Đào tạo",
-              "phongdaotao/daihoc": "Phòng Đào tạo - Đại học",
-              "phongdaotao/giangvien": "Phòng Đào tạo - Giảng viên",
-              "phongdaotao/thacsi": "Phòng Đào tạo - Thạc sĩ",
-              "phongdaotao/tiensi": "Phòng Đào tạo - Tiến sĩ",
-              phongkhaothi: "Phòng Khảo thí",
-              khoa: "Các Khoa",
-              viennghiencuuvahoptacphattrien: "Viện Nghiên cứu",
-              thongtinHVKTMM: "Thông tin Học viện",
-              test: "Test",
-            };
-
             const mappedFolders = foldersResponse.folders.map((folder) => ({
               name: folder,
-              displayName: folderMappings[folder] || folder, // Use folder name if no mapping found
+              displayName: folder,
             }));
 
             console.log("Mapped folders:", mappedFolders);

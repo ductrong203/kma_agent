@@ -5,6 +5,7 @@ This module provides API endpoints for uploading files to the data directory
 for RAG training, listing available training files, and deleting training files.
 """
 import logging
+import json
 import os
 import sys
 import shutil
@@ -35,6 +36,7 @@ router = APIRouter()
 # admin_rag.py is at: api/src/backend/api/admin_rag.py
 # We need to go up 4 levels to get to 'api/', then join with 'data'
 DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data"))
+DEPARTMENT_GRAPHS_DIR = os.path.join(os.path.dirname(DATA_DIR), "graphs", "department_graphs")
 
 # Ensure directories exist
 if not os.path.exists(DATA_DIR):
@@ -61,6 +63,76 @@ class FolderRenameRequest(BaseModel):
     """Request model for renaming a folder"""
     old_name: str = Field(..., description="Current name of the folder")
     new_name: str = Field(..., description="New name for the folder")
+
+
+def _rename_department_graph(old_name: str, new_name: str) -> bool:
+    """Rename graph artifacts and embedding key for a top-level data folder."""
+    old_graph_dir = os.path.join(DEPARTMENT_GRAPHS_DIR, f"{old_name}_graph")
+    new_graph_dir = os.path.join(DEPARTMENT_GRAPHS_DIR, f"{new_name}_graph")
+
+    if not os.path.isdir(old_graph_dir):
+        logger.info(f"No department graph found for renamed folder '{old_name}'")
+        return False
+    if os.path.exists(new_graph_dir):
+        raise FileExistsError(f"Department graph '{new_name}_graph' already exists")
+
+    os.rename(old_graph_dir, new_graph_dir)
+    try:
+        old_graph_file = os.path.join(new_graph_dir, f"{old_name}_graph.pkl")
+        new_graph_file = os.path.join(new_graph_dir, f"{new_name}_graph.pkl")
+        if os.path.isfile(old_graph_file):
+            os.rename(old_graph_file, new_graph_file)
+
+        embeddings_file = os.path.join(
+            DEPARTMENT_GRAPHS_DIR, "embeddings", "department_embeddings.json"
+        )
+        if os.path.isfile(embeddings_file):
+            with open(embeddings_file, "r", encoding="utf-8") as file:
+                embeddings = json.load(file)
+            if old_name in embeddings:
+                embeddings[new_name] = embeddings.pop(old_name)
+                temp_embeddings_file = f"{embeddings_file}.tmp"
+                with open(temp_embeddings_file, "w", encoding="utf-8") as file:
+                    json.dump(embeddings, file, ensure_ascii=False, indent=2)
+                os.replace(temp_embeddings_file, embeddings_file)
+    except Exception:
+        renamed_graph_file = os.path.join(new_graph_dir, f"{new_name}_graph.pkl")
+        original_graph_file = os.path.join(new_graph_dir, f"{old_name}_graph.pkl")
+        if os.path.isfile(renamed_graph_file) and not os.path.exists(original_graph_file):
+            os.rename(renamed_graph_file, original_graph_file)
+        if os.path.isdir(new_graph_dir) and not os.path.exists(old_graph_dir):
+            os.rename(new_graph_dir, old_graph_dir)
+        raise
+
+    logger.info(f"Renamed department graph: {old_name}_graph -> {new_name}_graph")
+    return True
+
+
+def _delete_department_graph(department: str) -> bool:
+    """Delete graph artifacts and embedding key for a removed top-level folder."""
+    graph_dir = os.path.join(DEPARTMENT_GRAPHS_DIR, f"{department}_graph")
+    graph_deleted = False
+
+    if os.path.isdir(graph_dir):
+        shutil.rmtree(graph_dir)
+        graph_deleted = True
+        logger.info(f"Deleted department graph: {graph_dir}")
+
+    embeddings_file = os.path.join(
+        DEPARTMENT_GRAPHS_DIR, "embeddings", "department_embeddings.json"
+    )
+    if os.path.isfile(embeddings_file):
+        with open(embeddings_file, "r", encoding="utf-8") as file:
+            embeddings = json.load(file)
+        if department in embeddings:
+            del embeddings[department]
+            temp_embeddings_file = f"{embeddings_file}.tmp"
+            with open(temp_embeddings_file, "w", encoding="utf-8") as file:
+                json.dump(embeddings, file, ensure_ascii=False, indent=2)
+            os.replace(temp_embeddings_file, embeddings_file)
+            logger.info(f"Deleted department embedding: {department}")
+
+    return graph_deleted
 
 # Helper function to check files recursively
 def _has_files_recursive(folder_path):
@@ -423,7 +495,7 @@ async def rebuild_rag_index(current_user: dict = Depends(get_current_user)):
         # Step 3.5: Clear GraphRAG cache to force reload of new graph
         logger.info("Clearing GraphRAG cache...")
         try:
-            from rag.rag_graph import clear_retriever_cache
+            from ...rag.rag_graph import clear_retriever_cache
             clear_retriever_cache()
             logger.info("✅ GraphRAG cache cleared successfully")
         except Exception as cache_error:
@@ -618,7 +690,7 @@ async def rebuild_department_rag_index(
         # Step 3: Clear GraphRAG cache to force reload
         logger.info("Clearing GraphRAG cache...")
         try:
-            from rag.rag_graph import clear_retriever_cache
+            from ...rag.rag_graph import clear_retriever_cache
             clear_retriever_cache()
             logger.info("✅ GraphRAG cache cleared successfully")
         except Exception as cache_error:
@@ -626,7 +698,6 @@ async def rebuild_department_rag_index(
         
         # Step 4: Reload ReActGraph agent
         logger.info("Reloading ReActGraph agent...")
-        from backend.api.chat import agent
         from ...agent.supervisor_agent import ReActGraph
         
         # Reinitialize agent with updated department graphs
@@ -634,8 +705,8 @@ async def rebuild_department_rag_index(
         new_agent.create_graph()
         
         # Reassign global agent variable in chat module
-        from . import chat
-        chat.agent = new_agent
+        from . import chat as chat_module
+        chat_module.agent = new_agent
         
         logger.info("ReActGraph agent reloaded successfully")
         
@@ -692,18 +763,10 @@ async def list_departments(current_user: dict = Depends(get_current_user)):
                     has_data = _has_files_recursive(item_path)
                     logger.info(f"Folder {item}: has_data={has_data}")
                     
-                    # Create display names (with fallback for unknown departments)
-                    display_names = {
-                        'default': 'Thư mục mặc định',
-                        'phongdaotao': 'Phòng Đào Tạo',
-                        'phongkhaothi': 'Phòng Khảo Thí',
-                        'viennghiencuuvahoptacphattrien': 'Viện Nghiên Cứu và Hợp Tác Phát Triển'
-                    }
-                    
                     departments.append({
                         "name": item,
-                        "display_name": display_names.get(item, item.title()),
-                        "description": f"Dữ liệu của {display_names.get(item, item.title())}",
+                        "display_name": item,
+                        "description": f"Dữ liệu của {item}",
                         "has_data": has_data
                     })
         
@@ -794,10 +857,18 @@ async def delete_folder(folder_name: str, delete_files: bool = Query(True), curr
             # Delete the folder and all its contents
             shutil.rmtree(folder_path)
             logger.info(f"Deleted folder and contents: {folder_path}")
+
+            graph_deleted = False
+            if "/" not in folder_name:
+                graph_deleted = _delete_department_graph(folder_name)
+                from ...rag.rag_graph import clear_retriever_cache
+                clear_retriever_cache()
+                logger.info("Cleared GraphRAG cache after folder deletion")
             
             return {
                 "success": True,
-                "message": f"Folder '{folder_name}' and all its contents deleted successfully"
+                "message": f"Folder '{folder_name}' and all its contents deleted successfully",
+                "graph_deleted": graph_deleted,
             }
         else:
             # Move files to default folder and delete the folder
@@ -820,10 +891,18 @@ async def delete_folder(folder_name: str, delete_files: bool = Query(True), curr
             os.rmdir(folder_path)
             
             logger.info(f"Moved {files_moved} files to default folder and deleted folder: {folder_path}")
+
+            graph_deleted = False
+            if "/" not in folder_name:
+                graph_deleted = _delete_department_graph(folder_name)
+                from ...rag.rag_graph import clear_retriever_cache
+                clear_retriever_cache()
+                logger.info("Cleared GraphRAG cache after folder deletion")
             
             return {
                 "success": True,
-                "message": f"Moved {files_moved} files to default folder and deleted folder '{folder_name}'"
+                "message": f"Moved {files_moved} files to default folder and deleted folder '{folder_name}'",
+                "graph_deleted": graph_deleted,
             }
     except Exception as e:
         logger.error(f"Error deleting folder: {str(e)}")
@@ -893,10 +972,23 @@ async def rename_folder(request: FolderRenameRequest, current_user: dict = Depen
     try:
         os.rename(old_path, new_path)
         logger.info(f"Renamed folder: {old_name} -> {new_name}")
+
+        graph_renamed = False
+        if "/" not in old_name and "/" not in new_name:
+            try:
+                graph_renamed = _rename_department_graph(old_name, new_name)
+                from ...rag.rag_graph import clear_retriever_cache
+                clear_retriever_cache()
+                logger.info("Cleared GraphRAG cache after folder rename")
+            except Exception:
+                if os.path.isdir(new_path) and not os.path.exists(old_path):
+                    os.rename(new_path, old_path)
+                raise
         
         return {
             "success": True,
-            "message": f"Folder renamed from '{old_name}' to '{new_name}' successfully"
+            "message": f"Folder renamed from '{old_name}' to '{new_name}' successfully",
+            "graph_renamed": graph_renamed,
         }
     except Exception as e:
         logger.error(f"Error renaming folder: {str(e)}")
@@ -1107,6 +1199,55 @@ class EditFileRequest(BaseModel):
     """Request model for editing a file"""
     file_path: str = Field(..., description="Path to the file to edit, can include folder/subfolder")
     content: str = Field(..., description="New content for the file")
+
+def _resolve_data_file(folder: str, filename: str) -> str:
+    """Resolve a file inside DATA_DIR and reject path traversal."""
+    if not filename or os.path.basename(filename) != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    folder_parts = [part for part in folder.replace("\\", "/").split("/") if part]
+    if any(part in {".", ".."} for part in folder_parts):
+        raise HTTPException(status_code=400, detail="Invalid folder path")
+
+    file_path = os.path.realpath(os.path.join(DATA_DIR, *folder_parts, filename))
+    data_dir = os.path.realpath(DATA_DIR)
+    if os.path.commonpath([data_dir, file_path]) != data_dir:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    return file_path
+
+@router.get("/preview-file", response_model=Dict[str, Any])
+async def preview_markdown_file(
+    filename: str = Query(..., description="Markdown filename to preview"),
+    folder: str = Query(..., description="Folder containing the Markdown file"),
+    current_user: dict = Depends(get_current_user)
+):
+    """Return OCR-generated Markdown content for an administrator preview."""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only administrators can preview training files")
+
+    if os.path.splitext(filename)[1].lower() != ".md":
+        raise HTTPException(status_code=400, detail="Only Markdown files (.md) can be previewed")
+
+    file_path = _resolve_data_file(folder, filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail=f"File {filename} not found in folder {folder}")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            content = file.read()
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail="Markdown file is not valid UTF-8") from exc
+    except OSError as exc:
+        logger.error(f"Error previewing Markdown file {file_path}: {exc}")
+        raise HTTPException(status_code=500, detail="Could not read Markdown file") from exc
+
+    return {
+        "success": True,
+        "filename": filename,
+        "folder": folder,
+        "content": content,
+    }
 
 # Thêm endpoint cho edit file (chỉ hỗ trợ file text)
 @router.get("/get-file-content/{filename}", response_model=Dict[str, Any])

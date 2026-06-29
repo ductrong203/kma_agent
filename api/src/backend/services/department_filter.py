@@ -7,6 +7,10 @@ import os
 
 class DepartmentFilterService:
     """Service to filter queries based on folder structure in data directory"""
+
+    DATA_DIR = os.path.realpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "data")
+    )
     
     # Map folder names to display names
     FOLDER_MAPPINGS = {
@@ -42,8 +46,47 @@ class DepartmentFilterService:
     
     @classmethod
     def get_available_folders(cls) -> Dict[str, Dict[str, str]]:
-        """Get all available folders with their display info"""
-        return cls.FOLDER_MAPPINGS
+        """Get configured folders plus folders that currently exist in data."""
+        folders = {}
+        if not os.path.isdir(cls.DATA_DIR):
+            return folders
+
+        for root, dirnames, _ in os.walk(cls.DATA_DIR):
+            dirnames[:] = [
+                name for name in dirnames
+                if not name.startswith(".") and name != "__pycache__"
+            ]
+            for dirname in dirnames:
+                full_path = os.path.join(root, dirname)
+                relative_path = os.path.relpath(full_path, cls.DATA_DIR).replace(os.sep, "/")
+                folders.setdefault(
+                    relative_path,
+                    {
+                        "display_name": dirname,
+                        "description": f"Tài liệu trong thư mục {relative_path}",
+                    },
+                )
+
+        return folders
+
+    @classmethod
+    def is_valid_folder(cls, folder: str) -> bool:
+        """Return whether folder is an existing directory inside the data directory."""
+        if not folder or os.path.isabs(folder):
+            return False
+
+        normalized = folder.replace("\\", "/")
+        if any(part in {"", ".", ".."} for part in normalized.split("/")):
+            return False
+
+        folder_path = os.path.realpath(os.path.join(cls.DATA_DIR, *normalized.split("/")))
+        try:
+            if os.path.commonpath([cls.DATA_DIR, folder_path]) != cls.DATA_DIR:
+                return False
+        except ValueError:
+            return False
+
+        return os.path.isdir(folder_path)
     
     @classmethod
     def validate_query_scope(cls, query: str, selected_folder: Optional[str], query_metadata_department: Optional[str]) -> tuple[bool, str]:
@@ -66,8 +109,9 @@ class DepartmentFilterService:
         if selected_folder == 'chung':
             return True, "General folder selected - all queries allowed"
         
-        # Check if selected folder exists in our mappings
-        if selected_folder not in cls.FOLDER_MAPPINGS:
+        # Admins can create folders dynamically, so validate against the data
+        # directory in addition to the legacy configured mappings.
+        if not cls.is_valid_folder(selected_folder):
             return False, f"Unknown folder: {selected_folder}"
 
         # A selected folder is a retrieval scope, not an authorization gate.
@@ -92,7 +136,7 @@ class DepartmentFilterService:
         if not folder or folder == 'all':
             return None  # No filtering for general access
         
-        if folder in cls.FOLDER_MAPPINGS:
+        if cls.is_valid_folder(folder):
             return {'department': folder}
         
         return None
@@ -100,4 +144,4 @@ class DepartmentFilterService:
     @classmethod
     def get_folder_info(cls, folder: str) -> Dict[str, Any]:
         """Get folder configuration info"""
-        return cls.FOLDER_MAPPINGS.get(folder, {})
+        return cls.get_available_folders().get(folder, {})

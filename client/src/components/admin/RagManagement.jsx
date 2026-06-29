@@ -12,7 +12,11 @@ import {
   FiEdit,
   FiDownload,
   FiEdit2,
+  FiEye,
+  FiX,
 } from "react-icons/fi";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "./RagManagement.css";
 import adminService from "../../services/adminService";
 
@@ -38,6 +42,10 @@ const RagManagement = () => {
   const [fileContent, setFileContent] = useState("");
   const [showEditModal, setShowEditModal] = useState(false);
   const [downloadingFiles, setDownloadingFiles] = useState({}); // Track downloading state for each file
+  const [previewFile, setPreviewFile] = useState(null);
+  const [previewContent, setPreviewContent] = useState("");
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // New states for department rebuild
   const [departments, setDepartments] = useState([]);
@@ -851,6 +859,36 @@ const RagManagement = () => {
     }
   };
 
+  const handlePreview = async (filename, folder) => {
+    setPreviewFile({ filename, folder });
+    setPreviewContent("");
+    setShowPreviewModal(true);
+    setPreviewLoading(true);
+
+    try {
+      const response = await adminService.previewMarkdownFile(filename, folder);
+      if (response?.success) {
+        setPreviewContent(response.content || "");
+      } else {
+        setShowPreviewModal(false);
+        setMessage(`Lỗi khi xem file: ${response?.message || "Không thể đọc file Markdown"}`);
+        setMessageType("error");
+      }
+    } catch (error) {
+      setShowPreviewModal(false);
+      setMessage(`Lỗi khi xem file: ${error.message || "Không thể đọc file Markdown"}`);
+      setMessageType("error");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setShowPreviewModal(false);
+    setPreviewFile(null);
+    setPreviewContent("");
+  };
+
   const cancelEdit = () => {
     setShowEditModal(false);
     setEditingFile(null);
@@ -1265,6 +1303,17 @@ const RagManagement = () => {
                               </td>
                               <td>
                                 <div className="action-buttons">
+                                  {file.filename.toLowerCase().endsWith(".md") && (
+                                    <button
+                                      className="preview-button"
+                                      onClick={() =>
+                                        handlePreview(file.filename, file.folder)
+                                      }
+                                      title="Xem nội dung Markdown sau OCR"
+                                    >
+                                      <FiEye />
+                                    </button>
+                                  )}
                                   <button
                                     className="edit-button"
                                     onClick={() =>
@@ -1337,6 +1386,41 @@ const RagManagement = () => {
               <button className="cancel-button" onClick={cancelEdit}>
                 Hủy
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPreviewModal && (
+        <div className="preview-modal-overlay" onClick={closePreview}>
+          <div
+            className="preview-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="preview-modal-header">
+              <div>
+                <h3>Xem nội dung sau OCR</h3>
+                <p>{previewFile?.folder}/{previewFile?.filename}</p>
+              </div>
+              <button
+                className="preview-close-button"
+                onClick={closePreview}
+                title="Đóng"
+              >
+                <FiX />
+              </button>
+            </div>
+
+            <div className="preview-modal-content">
+              {previewLoading ? (
+                <div className="loading">Đang tải nội dung file...</div>
+              ) : previewContent ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {previewContent}
+                </ReactMarkdown>
+              ) : (
+                <div className="no-files">File Markdown không có nội dung.</div>
+              )}
             </div>
           </div>
         </div>

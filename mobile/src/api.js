@@ -221,10 +221,10 @@ export const chatApi = {
     }
   },
 
-  async getConversations() {
+  async getConversations(skip = 0, limit = 20) {
     try {
       const result = await apiRequest(
-        `${ENDPOINTS.conversations}?skip=0&limit=50`,
+        `${ENDPOINTS.conversations}?skip=${skip}&limit=${limit}`,
       );
       return {
         success: true,

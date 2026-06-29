@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FiMessageSquare,
   FiPlus,
@@ -16,6 +16,8 @@ import chatService from "../services/chatService";
 import userService from "../services/userService";
 import "./ConversationList.css";
 
+const CONVERSATION_PAGE_SIZE = 20;
+
 const ConversationList = ({
   user,
   selectedConversationId,
@@ -29,6 +31,10 @@ const ConversationList = ({
   onUserUpdate,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(true);
+  const loadedCountRef = useRef(0);
+  const loadingMoreRef = useRef(false);
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -53,9 +59,17 @@ const ConversationList = ({
 
       setIsLoading(true);
       try {
-        const result = await chatService.getConversations(user.id);
+        const result = await chatService.getConversations(
+          user.id,
+          0,
+          CONVERSATION_PAGE_SIZE,
+        );
         if (result.success) {
           setConversations(result.conversations);
+          loadedCountRef.current = result.conversations.length;
+          setHasMoreConversations(
+            result.conversations.length === CONVERSATION_PAGE_SIZE,
+          );
         } else {
           console.error("Failed to load conversations:", result.error);
         }
@@ -70,6 +84,57 @@ const ConversationList = ({
       loadConversationsOnMount();
     }
   }, [user, setConversations]);
+
+  const loadMoreConversations = async () => {
+    if (
+      !user?.id ||
+      loadingMoreRef.current ||
+      !hasMoreConversations
+    ) {
+      return;
+    }
+
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const result = await chatService.getConversations(
+        user.id,
+        loadedCountRef.current,
+        CONVERSATION_PAGE_SIZE,
+      );
+
+      if (!result.success) {
+        console.error("Failed to load more conversations:", result.error);
+        return;
+      }
+
+      loadedCountRef.current += result.conversations.length;
+      setHasMoreConversations(
+        result.conversations.length === CONVERSATION_PAGE_SIZE,
+      );
+      setConversations((prev) => {
+        const existingIds = new Set(prev.map((conversation) => conversation.id));
+        return [
+          ...prev,
+          ...result.conversations.filter(
+            (conversation) => !existingIds.has(conversation.id),
+          ),
+        ];
+      });
+    } catch (error) {
+      console.error("Error loading more conversations:", error.message);
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleConversationScroll = (event) => {
+    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight <= 120) {
+      loadMoreConversations();
+    }
+  };
 
   const handleNewConversation = async () => {
     if (!user || !user.id) {
@@ -122,6 +187,7 @@ const ConversationList = ({
 
       if (result.success) {
         const newConversation = result.conversation;
+        loadedCountRef.current += 1;
         onConversationSelect(newConversation.id);
         if (onNewConversation) {
           onNewConversation(newConversation);
@@ -146,6 +212,7 @@ const ConversationList = ({
     try {
       const result = await chatService.deleteConversation(conversationId);
       if (result.success) {
+        loadedCountRef.current = Math.max(0, loadedCountRef.current - 1);
         setConversations((prev) =>
           prev.filter((conv) => conv.id !== conversationId),
         );
@@ -328,7 +395,10 @@ const ConversationList = ({
       </div>
 
       {/* Conversations */}
-      <div className="sidebar-conversations">
+      <div
+        className="sidebar-conversations"
+        onScroll={handleConversationScroll}
+      >
         {isLoading ? (
           <div className="sidebar-loading">
             <div className="sidebar-spinner" />
@@ -408,6 +478,12 @@ const ConversationList = ({
                 </div>
               </div>
             ))}
+            {isLoadingMore && (
+              <div className="sidebar-load-more">
+                <div className="sidebar-spinner" />
+                <span>Đang tải thêm...</span>
+              </div>
+            )}
           </div>
         )}
       </div>

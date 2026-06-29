@@ -32,6 +32,7 @@ const SUGGESTED_QUESTIONS = [
   "Quy định đăng ký học phần như thế nào?",
   "Thủ tục xin nghỉ học cần giấy tờ gì?",
 ];
+const CONVERSATION_PAGE_SIZE = 20;
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -46,6 +47,8 @@ const ChatScreen = ({ user, onLogout }) => {
   const insets = useSafeAreaInsets();
   const isWide = width >= 820;
   const flatListRef = useRef(null);
+  const conversationCountRef = useRef(0);
+  const loadingConversationsRef = useRef(false);
 
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -56,6 +59,9 @@ const ChatScreen = ({ user, onLogout }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [userProfileVisible, setUserProfileVisible] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const [hasMoreConversations, setHasMoreConversations] = useState(true);
+  const [isLoadingMoreConversations, setIsLoadingMoreConversations] =
+    useState(false);
   const [currentUser, setCurrentUser] = useState(user);
   const [activeModel, setActiveModel] = useState(null);
   const [chatMode, setChatMode] = useState("document");
@@ -63,7 +69,7 @@ const ChatScreen = ({ user, onLogout }) => {
   const canUseStudentMode = Boolean(currentUser?.studentCode);
 
   useEffect(() => {
-    loadConversations();
+    loadConversations({ reset: true });
     loadActiveModel();
 
     const modelTimer = setInterval(loadActiveModel, 10000);
@@ -101,10 +107,44 @@ const ChatScreen = ({ user, onLogout }) => {
     };
   }, []);
 
-  const loadConversations = async () => {
-    const response = await chatApi.getConversations();
-    if (response.success) {
-      setConversations(response.data || []);
+  const loadConversations = async ({ reset = false } = {}) => {
+    if (loadingConversationsRef.current || (!reset && !hasMoreConversations)) {
+      return;
+    }
+
+    loadingConversationsRef.current = true;
+    if (!reset) {
+      setIsLoadingMoreConversations(true);
+    }
+
+    const skip = reset ? 0 : conversationCountRef.current;
+    try {
+      const response = await chatApi.getConversations(
+        skip,
+        CONVERSATION_PAGE_SIZE,
+      );
+      if (response.success) {
+        const nextConversations = response.data || [];
+        conversationCountRef.current = skip + nextConversations.length;
+        setHasMoreConversations(
+          nextConversations.length === CONVERSATION_PAGE_SIZE,
+        );
+        setConversations((prev) => {
+          if (reset) {
+            return nextConversations;
+          }
+          const existingIds = new Set(prev.map((conversation) => conversation.id));
+          return [
+            ...prev,
+            ...nextConversations.filter(
+              (conversation) => !existingIds.has(conversation.id),
+            ),
+          ];
+        });
+      }
+    } finally {
+      loadingConversationsRef.current = false;
+      setIsLoadingMoreConversations(false);
     }
   };
 
@@ -149,6 +189,10 @@ const ChatScreen = ({ user, onLogout }) => {
   const handleDeleteConversation = async (id) => {
     const response = await chatApi.deleteConversation(id);
     if (response.success) {
+      conversationCountRef.current = Math.max(
+        0,
+        conversationCountRef.current - 1,
+      );
       setConversations((prev) => prev.filter((conv) => conv.id !== id));
       if (conversationId === id) {
         handleNewConversation();
@@ -206,7 +250,7 @@ const ChatScreen = ({ user, onLogout }) => {
           timestamp: response.data.timestamp || new Date().toISOString(),
         },
       ]);
-      loadConversations();
+      loadConversations({ reset: true });
     } catch (error) {
       Alert.alert("Lỗi", error.message || "Lỗi kết nối");
       setSelectedFiles(pendingFiles);
@@ -233,6 +277,9 @@ const ChatScreen = ({ user, onLogout }) => {
         setUserProfileVisible(true);
       }}
       onLogout={onLogout}
+      onLoadMore={() => loadConversations()}
+      isLoadingMore={isLoadingMoreConversations}
+      hasMoreConversations={hasMoreConversations}
     />
   );
   const displayName = currentUser?.name || currentUser?.username || "bạn";

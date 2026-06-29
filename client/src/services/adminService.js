@@ -527,6 +527,19 @@ class AdminService {
       };
     }
   }
+
+  async previewMarkdownFile(filename, folder) {
+    try {
+      const url = `${API_ENDPOINTS.ADMIN_PREVIEW_FILE}?filename=${encodeURIComponent(filename)}&folder=${encodeURIComponent(folder)}`;
+      return await httpClient.get(url);
+    } catch (error) {
+      console.error('Error previewing Markdown file:', error);
+      return {
+        success: false,
+        message: error.message || 'Failed to preview Markdown file'
+      };
+    }
+  }
   
   async downloadFile(filePath) {
     try {

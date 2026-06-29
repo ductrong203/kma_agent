@@ -16,6 +16,13 @@ from .rag_graph import process_kma_query_sync
 logger = logging.getLogger(__name__)
 
 GENERAL_DEPARTMENT_VALUES = {"", "all", "chung", "document_graph", "common"}
+LEGACY_DEPARTMENT_ALIASES = {
+    "phongdaotao": "phongdaotao",
+    "phongkhaothi": "phongkhaothi",
+    "khoa": "khoa",
+    "viennghiencuuvahoptacphattrien": "viennghiencuuvahoptacphattrien",
+    "thongtinhvktmm": "thongtinhvktmm",
+}
 
 
 def _normalize_department_filter(department: Optional[str]) -> Optional[str]:
@@ -24,13 +31,13 @@ def _normalize_department_filter(department: Optional[str]) -> Optional[str]:
         return None
 
     normalized = str(department).strip()
-    if not normalized or normalized.lower() in GENERAL_DEPARTMENT_VALUES:
+    normalized_lower = normalized.lower()
+    if not normalized or normalized_lower in GENERAL_DEPARTMENT_VALUES:
         return None
 
-    if normalized == "thongtinHVKTMM":
-        return "thongtinhvktmm"
-
-    return normalized.lower()
+    # Preserve dynamically created folder names because department graph keys
+    # are case-sensitive (for example, "CT Đào tạo").
+    return LEGACY_DEPARTMENT_ALIASES.get(normalized_lower, normalized)
 
 
 class KMARegulationInput(BaseModel):

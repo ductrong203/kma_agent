@@ -1,5 +1,6 @@
 ﻿import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   StyleSheet,
@@ -31,6 +32,9 @@ const ChatSidebar = ({
   onRenameConversation,
   onProfilePress,
   onLogout,
+  onLoadMore,
+  isLoadingMore,
+  hasMoreConversations,
 }) => {
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
@@ -88,6 +92,16 @@ const ChatSidebar = ({
           data={conversations}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
+          onEndReached={hasMoreConversations ? onLoadMore : undefined}
+          onEndReachedThreshold={0.35}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.loadingMore}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.loadingMoreText}>Đang tải thêm...</Text>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <View style={styles.emptyIconWrap}>
@@ -255,6 +269,18 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: SPACING.sm,
     paddingBottom: SPACING.lg,
+  },
+  loadingMore: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    paddingVertical: SPACING.lg,
+  },
+  loadingMoreText: {
+    color: COLORS.onSurfaceVariant,
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: "700",
   },
   item: {
     flexDirection: "row",
